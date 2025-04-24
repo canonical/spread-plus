@@ -13,15 +13,15 @@ execute: |
     # Works even with different variants producing different data.
     FAIL_CHECK=0 spread -v -reuse -resend -artifacts=./artifacts
 
-    cat artifacts/lxd:ubuntu-16.04:checks/main:a/one.txt | grep one-a
-    cat artifacts/lxd:ubuntu-16.04:checks/main:a/two.txt | grep two-a,b
+    cat artifacts/lxd:ubuntu-22.04:checks/main:a/one.txt | grep one-a
+    cat artifacts/lxd:ubuntu-22.04:checks/main:a/two.txt | grep two-a,b
 
-    cat artifacts/lxd:ubuntu-16.04:checks/main:b/one.txt | grep one-b
-    cat artifacts/lxd:ubuntu-16.04:checks/main:b/two.txt | grep two-a,b
+    cat artifacts/lxd:ubuntu-22.04:checks/main:b/one.txt | grep one-b
+    cat artifacts/lxd:ubuntu-22.04:checks/main:b/two.txt | grep two-a,b
 
     ls artifacts/ | wc -l | grep 1
-    ls artifacts/lxd:ubuntu-16.04:checks/ | wc -l | grep 2
-    ls artifacts/lxd:ubuntu-16.04:checks/main:a/ | wc -l | grep 2
+    ls artifacts/lxd:ubuntu-22.04:checks/ | wc -l | grep 2
+    ls artifacts/lxd:ubuntu-22.04:checks/main:a/ | wc -l | grep 2
 
     rm -rf artifacts/
 
@@ -31,11 +31,11 @@ execute: |
         exit 1
     fi
 
-    cat artifacts/lxd:ubuntu-16.04:checks/main:a/one.txt | grep one-a
-    cat artifacts/lxd:ubuntu-16.04:checks/main:b/one.txt | grep one-b
+    cat artifacts/lxd:ubuntu-22.04:checks/main:a/one.txt | grep one-a
+    cat artifacts/lxd:ubuntu-22.04:checks/main:b/one.txt | grep one-b
 
-    test ! -f artifacts/lxd:ubuntu-16.04:checks/main:a/two.txt
-    test ! -f artifacts/lxd:ubuntu-16.04:checks/main:b/two.txt
+    test ! -f artifacts/lxd:ubuntu-22.04:checks/main:a/two.txt
+    test ! -f artifacts/lxd:ubuntu-22.04:checks/main:b/two.txt
 
     rm -rf artifacts/
 

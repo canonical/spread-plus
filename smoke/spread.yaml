@@ -1,0 +1,62 @@
+# This spread setup is used to test spread with spread itself. For that, the
+# spread interpreting this file is assumed to be working based on prior
+# testing, while the spread code being shipped to the remote server is being
+# verified for correctness. See the tests to have an idea of how that's done.
+# Keep in mind that the logic in task.yaml is supposed to test the *built*
+# spread, not the one running the task.yaml logic.
+
+project: spread
+
+backends:
+    google:
+        key: "$(HOST: echo $SPREAD_GOOGLE_KEY)"
+        location: snapd-spread/us-east1-b
+        halt-timeout: 2h
+        systems:
+            - ubuntu-22.04-64:
+                image: ubuntu-2204-64
+                workers: 1
+
+    openstack:
+        key: '$(HOST: echo "$SPREAD_OPENSTACK_ENV")'
+        plan: staging-cpu2-ram4-disk20
+        halt-timeout: 2h
+        wait-timeout: 5m
+        groups: [default]        
+        environment:
+            HTTP_PROXY: 'http://squid.internal:3128'
+            HTTPS_PROXY: 'http://squid.internal:3128'
+            http_proxy: 'http://squid.internal:3128'
+            https_proxy: 'http://squid.internal:3128'
+            no_proxy: '127.0.0.1,ubuntu.com'
+            NO_PROXY: '127.0.0.1,ubuntu.com'
+        systems:
+            - ubuntu-24.04-64:
+                image: snapd-spread/ubuntu-24.04-64
+                workers: 1
+
+    testflinger:
+        environment:
+            TRUST_TEST_KEYS: "false"
+        wait-timeout: 30m
+        kill-timeout: 40m
+        systems:
+            - ubuntu-core-24-arm-64-rpi4:
+                  queue: rpi4b
+                  image: https://cdimage.ubuntu.com/ubuntu-core/24/dangerous-stable/current/ubuntu-core-24-arm64+raspi.img.xz
+                  workers: 1
+                  username: ubuntu
+                  password: ubuntu
+
+exclude:
+    - .spread-reuse.yaml
+    - tests/.spread-reuse.yaml
+    - $CACHE_DISABLED
+
+path: /root/spread
+
+suites:
+    tests/: 
+        summary: smoke tests used to test spread built in the ci
+
+# vim:ts=4:sw=4:et

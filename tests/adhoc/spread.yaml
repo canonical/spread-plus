@@ -8,7 +8,7 @@ environment:
 backends:
     lxd:
         systems:
-            - ubuntu-16.04
+            - ubuntu-22.04
     adhoc:
         allocate: |
             echo ALLOCATING
@@ -16,7 +16,7 @@ backends:
         discard: |
             echo DISCARDING
         systems:
-            - ubuntu-16.04:
+            - ubuntu-22.04:
                 username: $ADHOC_USERNAME
                 password: $ADHOC_PASSWORD
 

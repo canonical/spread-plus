@@ -4,18 +4,18 @@ backends:
     lxd-a:
         type: lxd
         systems:
-            - ubuntu-16.04-a:
-                image: ubuntu-16.04
-            - ubuntu-16.04-m:
-                image: ubuntu-16.04
+            - ubuntu-22.04-a:
+                image: ubuntu-22.04
+            - ubuntu-22.04-m:
+                image: ubuntu-22.04
                 manual: true
     lxd-m:
         type: lxd
         systems:
-            - ubuntu-16.04-a:
-                image: ubuntu-16.04
-            - ubuntu-16.04-m:
-                image: ubuntu-16.04
+            - ubuntu-22.04-a:
+                image: ubuntu-22.04
+            - ubuntu-22.04-m:
+                image: ubuntu-22.04
                 manual: true
         manual: true
 

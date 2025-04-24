@@ -11,27 +11,29 @@ Spread
 [Variants](#variants)  
 [Blacklisting and whitelisting](#blacklisting)  
 [Preparing and restoring](#preparing)  
-[Functions](#functions)
+[Functions](#functions)  
 [Rebooting](#rebooting)  
 [Timeouts](#timeouts)  
 [Fast iterations with reuse](#reuse)  
 [Debugging](#debugging)  
-[Repeating tasks](#repeating)
-[Define number of Workers](#workers)
+[Repeating tasks](#repeating)  
+[Define number of Workers](#workers)  
 [Passwords and usernames](#passwords)  
 [Including, excluding, and renaming files](#including)  
 [Selecting which tasks to run](#selecting)  
 [Disabling unless manually selected](#manual)  
 [Fetching artifacts](#artifacts)  
+[Saving logs](#logs)  
 [LXD backend](#lxd)  
 [QEMU backend](#qemu)  
 [Google backend](#google)  
 [Openstack backend](#openstack)  
-[Linode backend](#linode)
-[Testflinger backend](#testflinger)
+[Linode backend](#linode)  
+[Testflinger backend](#testflinger)  
 [AdHoc backend](#adhoc)  
 [More on parallelism](#parallelism)  
 [Repacking and delta uploads](#repacking)  
+[Performance output](#performance)    
 
 <a name="why"/>
 
@@ -563,6 +565,10 @@ priority: 100
 The larger the priority, the earlier it will be scheduled. The default
 priority is zero, and negative priorities are supported too.
 
+When the `-order` parameter is used, spread executes the tasks in the sequence
+defined by the tasks filter. This option is useful when tasks need to be
+executed sequentially.
+
 
 <a name="repeating"/>
 
@@ -783,6 +789,15 @@ artifacts:
     - some/dir/
 ...
 ```
+
+<a name="logs"/>
+
+## Saving logs
+
+Some backends have the ability of saving some logs, generally when there is an error
+during the allocation or reboot. Logs are saved locally only when the parameter
+`-logs` is added.
+
 
 ### Task-level artifacts
 
@@ -1244,7 +1259,13 @@ backends:
                   workers: 2
                   username: user
                   password: pass
-
+            - ubuntu-murcia:
+                queue: murcia-3200
+                image: core20-latest-stable
+                username: ubuntu
+                reserve-key: lp:<KEY_NAME>|gh:<KEY_NAME>                
+                ssh-rsa-key: '$(HOST: echo "$SPREAD_SSH_KEY")'
+                ssh-key-pass: '$(HOST: echo "$SPREAD_SSH_KEY_PASS")'
 ```
 
 As the number of devices are limited and the time to get access is uncertaint, the testflinger
@@ -1258,9 +1279,13 @@ When the machines terminate running, they will be free. If anything
 happens that prevents the immediate removal, they will remain in the account
 and need to be removed by hand.
 
-Some links to make your life easier:
+The reserve-key can be used to specify which key has to be imported into the device from the
+keys provider, currently just launchpad and github are supported. When a key is imported into
+the device, the ssh-rsa-key is used to connect to the target device and the ssh-key-pass can
+be used to read the key if the rsa key is encrypted.
+
+Read this link to make your life easier:
     * [Testflinger documentation](https://testflinger.readthedocs.io)
-    * [Testflinger queues and devices](https://github.com/canonical/certification-lab-docs/blob/main/reference/testflinger-devices.rst)
 
 <a name="adhoc"/>
 
@@ -1417,3 +1442,14 @@ prepare: |
 
 The `rename` and `exclude` settings used above ensure that the tarball that goes
 into `repack` looks like the one offered by GitHub.
+
+<a name="performance"/>
+
+## Performance output
+
+Spread provides detailed output for each task, including timestamped information for every line. When using
+the `-perf` parameter, spread displays the output after each phase prepare/execute/debug/restore is completed.
+Additionally, the output can be saved as a log file by including the `-logs` parameter.
+
+This functionality is particularly useful for tracking execution timings and gaining insight into the behavior
+and performance of individual tasks.

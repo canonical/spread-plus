@@ -1,0 +1,7 @@
+summary: Ensure reboot works.
+
+execute: |
+    if [ $SPREAD_REBOOT = 0 ]; then
+        REBOOT
+    fi
+    echo "Works"

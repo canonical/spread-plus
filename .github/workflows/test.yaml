@@ -1,28 +1,193 @@
-name: Test spread
+name: Test spread-plus
 
 on:
   push:
     branches:
-    - master
+    - main
   pull_request:
     branches:
-    - master
-
+    - main
 
 jobs:
-  run-tests:
-    runs-on: self-hosted
+  build:
+    name: Build Spread
+    runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v2
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-      - name: Run tests
-        run: |
-          spread google:
+    - name: Install dependencies
+      env:
+          GOCHANNEL: 1.24/stable
+      run: |
+          sudo snap install go --classic --channel "$GOCHANNEL"
 
-      - name: Discard spread workers
-        if: always()
-        run: |
-          shopt -s nullglob
+    - name: Build spread
+      run: |
+          go build -o spread-plus cmd/spread/main.go
+
+    - name: Upload spread logs
+      uses: actions/upload-artifact@v4
+      with:
+        name: "spread-plus-${{ github.run_id }}"
+        path: "spread-plus"
+
+  integration-tests:
+    name: Integration Tests
+    needs: [build]
+    runs-on: [self-hosted, spread-enabled]
+
+    steps:
+    - name: Ensure the workspace is clean
+      run: |
+          rm -rf "${{ github.workspace }}"
+          mkdir "${{ github.workspace }}"
+
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download spread-plus
+      uses: actions/download-artifact@v4
+      with:
+        name: "spread-plus-${{ github.run_id }}"
+        path: "${{ github.workspace }}/bin"
+
+    - name: Integration tests
+      env:
+          SPREAD_GOOGLE_KEY: ${{ secrets.SPREAD_GOOGLE_KEY }}
+      run: |      
+          chmod +x "${{ github.workspace }}"/bin/spread-plus
+          "${{ github.workspace }}/bin/spread-plus" google:tests/
+
+    - name: Discard spread workers
+      if: always()
+      run: |
+          shopt -s nullglob;
           for r in .spread-reuse.*.yaml; do
-            spread -discard -reuse-pid="$(echo "$r" | grep -o -E '[0-9]+')"
+            spread -discard -reuse-pid="$(echo "$r" | grep -o -E '[0-9]+')";
           done
+
+    - name: Cleanup job workspace after run tests
+      if: always()
+      run: |
+          rm -rf "${{ github.workspace }}"
+          mkdir "${{ github.workspace }}"
+
+  smoke-tests:
+    name: Smoke Tests
+    needs: [build]
+    runs-on: [self-hosted, spread-enabled]
+
+    steps:
+    - name: Ensure the workspace is clean
+      run: |
+          rm -rf "${{ github.workspace }}"
+          mkdir "${{ github.workspace }}"
+
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download spread-plus
+      uses: actions/download-artifact@v4
+      with:
+        name: "spread-plus-${{ github.run_id }}"
+        path: "${{ github.workspace }}/bin"
+
+    - name: Smoke tests with google backend
+      env:
+          SPREAD_GOOGLE_KEY: ${{ secrets.SPREAD_GOOGLE_KEY }}
+      run: |
+          cd "${{ github.workspace }}"/smoke
+          chmod +x "${{ github.workspace }}"/bin/spread-plus
+          "${{ github.workspace }}/bin/spread-plus" google:tests/
+
+    - name: Smoke tests with openstack backend
+      env:
+          OS_AUTH_URL: ${{ secrets.OS_AUTH_URL }}
+          OS_IDENTITY_API_VERSION: ${{ vars.OS_IDENTITY_API_VERSION }}
+          OS_INTERFACE: ${{ vars.OS_INTERFACE }}
+          OS_PASSWORD: ${{ secrets.OS_PASSWORD }}
+          OS_PROJECT_DOMAIN_NAME: ${{ vars.OS_PROJECT_DOMAIN_NAME }}
+          OS_PROJECT_NAME: ${{ secrets.OS_PROJECT_NAME }}
+          OS_REGION_NAME: ${{ secrets.OS_REGION_NAME }}
+          OS_USER_DOMAIN_NAME: ${{ vars.OS_USER_DOMAIN_NAME }}
+          OS_USERNAME: ${{ secrets.OS_USERNAME }}
+          OS_SKIP: ${{ vars.SKIP_OPENSTACK }}
+      run: |
+          if [ "$OS_SKIP" == true ]; then
+              echo "Skipping openstack smoke tests..."
+              exit
+          fi
+          cd "${{ github.workspace }}"/smoke
+          "${{ github.workspace }}/bin/spread-plus" openstack:tests/
+
+    - name: Smoke tests with testflinger backend
+      env:
+          TF_SKIP: ${{ vars.SKIP_TESTFLINGER }}
+
+      run: |
+          if [ "$TF_SKIP" == true ]; then
+              echo "Skipping testflinger smoke tests..."
+              exit
+          fi
+          cd "${{ github.workspace }}"/smoke
+          "${{ github.workspace }}/bin/spread-plus" testflinger:tests/
+  
+    - name: Discard spread workers
+      if: always()
+      run: |
+          shopt -s nullglob;
+          for r in .spread-reuse.*.yaml; do
+            spread -discard -reuse-pid="$(echo "$r" | grep -o -E '[0-9]+')";
+          done
+
+    - name: Cleanup job workspace after run tests
+      if: always()
+      run: |
+          rm -rf "${{ github.workspace }}"
+          mkdir "${{ github.workspace }}"
+
+  upload:
+    name: Upload binary to GCE
+    runs-on: ubuntu-latest
+    needs: [integration-tests, smoke-tests]
+
+    steps:
+    - name: Download spread-plus
+      uses: actions/download-artifact@v4
+      with:
+        name: "spread-plus-${{ github.run_id }}"
+        path: "${{ github.workspace }}/bin"
+
+    - name: Upload to google bucket
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      env:
+          GCLOUD_SA_KEY: ${{ secrets.GCLOUD_SA_KEY }}
+          SPREAD_FILE: spread-plus-amd64
+      run: |
+          sudo snap install google-cloud-sdk --classic
+          echo "$GCLOUD_SA_KEY" > sa.json
+          gcloud auth activate-service-account --key-file=sa.json
+          rm -f sa.json
+
+          mv "${{ github.workspace }}"/bin/spread-plus spread
+          chmod +x spread
+          tar -czf "$SPREAD_FILE".tar.gz spread
+
+          # Back up previous spread if it is published
+          if gsutil ls gs://snapd-spread-tests/spread/"$SPREAD_FILE".tar.gz; then
+              gsutil cp gs://snapd-spread-tests/spread/"$SPREAD_FILE".tar.gz gs://snapd-spread-tests/spread/"$SPREAD_FILE"-old.tar.gz
+          fi
+          gsutil cp "$SPREAD_FILE".tar.gz gs://snapd-spread-tests/spread/"$SPREAD_FILE".tar.gz
+
+    - name: Logout from Google Cloud
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      run: |
+          gcloud auth revoke
+
+    - name: Cleanup job workspace after run tests
+      if: always()
+      run: |
+          rm -rf "${{ github.workspace }}"
+          mkdir "${{ github.workspace }}"

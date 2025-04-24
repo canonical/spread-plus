@@ -13,12 +13,12 @@ execute: |
     # Works even with different variants producing different data.
     FAIL_CHECK=0 spread -v -reuse -resend -artifacts=./artifacts
 
-    test -f artifacts/lxd:ubuntu-16.04:checks/my-artifacts/one.txt
-    test -f artifacts/lxd:ubuntu-16.04:checks/my-artifacts/two.txt
+    test -f artifacts/lxd:ubuntu-22.04:checks/my-artifacts/one.txt
+    test -f artifacts/lxd:ubuntu-22.04:checks/my-artifacts/two.txt
 
     ls artifacts/ | wc -l | grep 1
-    ls artifacts/lxd:ubuntu-16.04:checks | wc -l | grep 1
-    ls artifacts/lxd:ubuntu-16.04:checks/my-artifacts | wc -l | grep 2
+    ls artifacts/lxd:ubuntu-22.04:checks | wc -l | grep 1
+    ls artifacts/lxd:ubuntu-22.04:checks/my-artifacts | wc -l | grep 2
 
     rm -rf artifacts/
 
@@ -28,11 +28,11 @@ execute: |
         exit 1
     fi
 
-    test -f artifacts/lxd:ubuntu-16.04:checks/my-artifacts/one.txt
-    test -f artifacts/lxd:ubuntu-16.04:checks/my-artifacts/one.txt
+    test -f artifacts/lxd:ubuntu-22.04:checks/my-artifacts/one.txt
+    test -f artifacts/lxd:ubuntu-22.04:checks/my-artifacts/one.txt
 
-    test ! -f artifacts/lxd:ubuntu-16.04:checks/my-artifacts/two.txt
-    test ! -f artifacts/lxd:ubuntu-16.04:checks/my-artifacts/two.txt
+    test ! -f artifacts/lxd:ubuntu-22.04:checks/my-artifacts/two.txt
+    test ! -f artifacts/lxd:ubuntu-22.04:checks/my-artifacts/two.txt
 
     rm -rf artifacts/
 

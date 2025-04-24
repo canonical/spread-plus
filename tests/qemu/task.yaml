@@ -8,11 +8,11 @@ prepare: |
 
     mkdir -p ~/.spread/qemu
     if [ "$SPREAD_BACKEND" = qemu ]; then
-        ln -sf /dev/sda ~/.spread/qemu/ubuntu-16.04.img
+        ln -sf /dev/sda ~/.spread/qemu/ubuntu-22.04.img
     else
         apt install -y autopkgtest genisoimage
         autopkgtest-buildvm-ubuntu-cloud -a amd64 -r xenial
-        mv autopkgtest-xenial-amd64.img ~/.spread/qemu/ubuntu-16.04.img
+        mv autopkgtest-xenial-amd64.img ~/.spread/qemu/ubuntu-22.04.img
     fi
 
     if [ ! -f .spread-reuse.yaml ]; then
@@ -23,7 +23,7 @@ prepare: |
 execute: |
     spread -vv -reuse -resend &> task.out
 
-    grep 'qemu:ubuntu-16.04:checks/main' task.out
+    grep 'qemu:ubuntu-22.04:checks/main' task.out
     grep '^WORKS$' task.out
 
 debug: |
