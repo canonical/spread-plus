@@ -699,7 +699,7 @@ func (p *openstackProvider) createMachine(ctx context.Context, system *System) (
 		storage = 20
 	}
 
-	if system.Ephemeral {
+	if !system.Ephemeral {
 		opts.BlockDeviceMappings = []nova.BlockDeviceMapping{{
 			BootIndex:       0,
 			SourceType:      "image",
