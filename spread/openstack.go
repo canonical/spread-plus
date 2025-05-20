@@ -699,13 +699,15 @@ func (p *openstackProvider) createMachine(ctx context.Context, system *System) (
 		storage = 20
 	}
 
-	opts.BlockDeviceMappings = []nova.BlockDeviceMapping{{
-		BootIndex:       0,
-		SourceType:      "image",
-		DestinationType: "volume",
-		VolumeSize:      storage,
-		UUID:            image.Id,
-	}}
+	if !system.Ephemeral {
+		opts.BlockDeviceMappings = []nova.BlockDeviceMapping{{
+			BootIndex:       0,
+			SourceType:      "image",
+			DestinationType: "volume",
+			VolumeSize:      storage,
+			UUID:            image.Id,
+		}}
+	}
 
 	if len(system.Groups) > 0 {
 		sgNames, err := p.findSecurityGroupNames(system.Groups)
