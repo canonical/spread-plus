@@ -18,10 +18,10 @@ backends:
                 workers: 1
 
     openstack:
-        key: '$(HOST: echo "$OS_PASSWORD")'
-        endpoint: '$(HOST: echo "$OS_AUTH_URL")'
-        account: '$(HOST: echo "$OS_USERNAME")'
-        location: '$(HOST: echo "$OS_REGION_NAME/$OS_PROJECT_NAME")'
+        key: '$(HOST: echo $OS_PASSWORD)'
+        endpoint: '$(HOST: echo $OS_AUTH_URL)'
+        account: '$(HOST: echo $OS_USERNAME)'
+        location: '$(HOST: echo $OS_REGION_NAME/$OS_PROJECT_NAME)'
         plan: staging-cpu2-ram4-disk20
         halt-timeout: 2h
         wait-timeout: 5m
