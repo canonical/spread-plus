@@ -2,11 +2,11 @@ package spread
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -21,7 +21,6 @@ import (
 	"github.com/go-goose/goose/v5/neutron"
 	"github.com/go-goose/goose/v5/nova"
 
-	"github.com/joho/godotenv"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/net/context"
 )
@@ -75,8 +74,8 @@ type openstackProvider struct {
 
 	mu sync.Mutex
 
-	keyChecked bool
-	keyErr     error
+	authComplete bool
+	authErr      error
 }
 
 type openstackServer struct {
@@ -212,7 +211,7 @@ func (p *openstackProvider) Reuse(ctx context.Context, rsystem *ReuseSystem, sys
 }
 
 func (p *openstackProvider) Allocate(ctx context.Context, system *System) (Server, error) {
-	if err := p.checkKey(); err != nil {
+	if err := p.checkCredentials(); err != nil {
 		return nil, err
 	}
 
@@ -239,7 +238,9 @@ runcmd:
   - test -d /etc/ssh/sshd_config.d && echo 'PermitRootLogin=yes' > /etc/ssh/sshd_config.d/00-spread.conf
   - test -d /etc/ssh/sshd_config.d && echo 'PasswordAuthentication=yes' >> /etc/ssh/sshd_config.d/00-spread.conf
   - pkill -o -HUP sshd || true
-  - echo '` + openstackReadyMarker + `' > /dev/ttyS0
+  - test -c /dev/ttyS0 && echo '` + openstackReadyMarker + `' 1>/dev/ttyS0 2>/dev/null || true
+  - test -c /dev/ttyAMA0 && echo '` + openstackReadyMarker + `' 1>/dev/ttyAMA0 2>/dev/null || true
+  - test -c /dev/console && echo '` + openstackReadyMarker + `' 1>/dev/console 2>/dev/null || true
 `
 
 const openstackReadyMarker = "MACHINE-IS-READY"
@@ -428,17 +429,18 @@ func (p *openstackProvider) findSecurityGroupNames(names []string) ([]nova.Secur
 	return secGroupNames, nil
 }
 
-var openstackProvisionTimeout = 3 * time.Minute
-var openstackProvisionRetry = 5 * time.Second
+var openstackProvisionTimeout = 30 * time.Minute
+var openstackProvisionRetry = 10 * time.Second
+var openstackProvisionRerun = 2 * time.Minute
 
-func (p *openstackProvider) saveProvisioningOutput(s *openstackServer, detail *nova.ServerDetail) error {
+func (p *openstackProvider) saveProvisioningOutput(name string, detail *nova.ServerDetail) error {
 	// output is saved just if the status is error and fault object set
 	if detail.Status != nova.StatusError || detail.Fault == nil {
 		return nil
 	}
 
 	// Use the name to identify the file
-	resultsFile := s.d.Name + ".result.log"
+	resultsFile := name + ".result.log"
 
 	// Build the output to write to the log
 	var buffer bytes.Buffer
@@ -450,57 +452,68 @@ func (p *openstackProvider) saveProvisioningOutput(s *openstackServer, detail *n
 		return err
 	}
 
-	printf("Allocation output for instance %s saved to %s/%s", s.d.Name, p.options.Logs, resultsFile)
+	printf("Allocation output for instance %s saved to %s/%s", name, p.options.Logs, resultsFile)
 	return nil
 }
 
-func (p *openstackProvider) waitProvision(ctx context.Context, s *openstackServer) error {
-	debugf("Waiting for %s to provision...", s)
+func (p *openstackProvider) buildServer(ctx context.Context, system *System, name string, opts nova.RunServerOpts) (string, error) {
 
-	wait_timeout := s.system.WaitTimeout.Duration
+	wait_timeout := system.WaitTimeout.Duration
 	timeout := time.After(openstackProvisionTimeout)
-	if wait_timeout != 0 {
+	if wait_timeout > 0 {
 		timeout = time.After(wait_timeout)
 	}
 	retry := time.NewTicker(openstackProvisionRetry)
+	rerun := time.NewTicker(openstackProvisionRerun)
 	defer retry.Stop()
+	defer rerun.Stop()
+
+	status := ""
+	server, err := p.computeClient.RunServer(opts)
+	if err != nil {
+		return "", fmt.Errorf("cannot create instance: %v", &openstackError{err})
+	}
 
 	for {
 		select {
 		case <-timeout:
-			server, err := p.computeClient.GetServer(s.d.Id)
-			if err != nil {
-				return fmt.Errorf("timeout waiting for %s to provision", s.d.Id)
-			}
-			if server.Fault == nil {
-				return fmt.Errorf("timeout waiting for %s to provision, status: %s", s.d.Id, server.Status)
-			}
-			return fmt.Errorf("timeout waiting for %s to provision, error: %s", s, server.Fault.Message)
+			return "", fmt.Errorf("timeout waiting trying to build server")
 
 		case <-retry.C:
-			server, err := p.computeClient.GetServer(s.d.Id)
+			if status == nova.StatusError {
+				continue
+			}
+			server, err := p.computeClient.GetServer(server.Id)
 			if err != nil {
 				debugf("cannot get instance info: %v", &openstackError{err})
 				continue
 			}
-			if server.Status != nova.StatusBuild {
-				if server.Status != nova.StatusActive {
-					if p.options.Logs != "" {
-						// Use the uuid to identify the file
-						err = p.saveProvisioningOutput(s, server)
-						if err != nil {
-							return fmt.Errorf("error saving provisioning result output: %v", err)
-						}
+			if server.Status == nova.StatusActive {
+				return server.Id, nil
+			} else if server.Status == nova.StatusError {
+				status = nova.StatusError
+				if p.options.Logs != "" {
+					// Use the uuid to identify the file
+					err = p.saveProvisioningOutput(name, server)
+					if err != nil {
+						return "", fmt.Errorf("error saving provisioning result output: %v", err)
 					}
-					if server.Status != nova.StatusError || server.Fault == nil {
-						return fmt.Errorf("cannot use server with status %s", server.Status)
-					}
-					return fmt.Errorf(server.Fault.Message)
 				}
-				return nil
+				printf("Cannot allocate server %s: %s, retrying...", name, server.Fault.Message)
+				err := p.computeClient.DeleteServer(server.Id)
+				if err != nil {
+					return "", fmt.Errorf("cannot remove openstack instance: %v", &openstackError{err})
+				}
+				continue
+			}
+		case <-rerun.C:
+			status = ""
+			server, err = p.computeClient.RunServer(opts)
+			if err != nil {
+				return "", fmt.Errorf("cannot create instance: %v", &openstackError{err})
 			}
 		case <-ctx.Done():
-			return fmt.Errorf("cannot wait for %s to provision: interrupted", s)
+			return "", fmt.Errorf("cannot wait for %s to provision: interrupted", server.Id)
 		}
 	}
 }
@@ -716,15 +729,15 @@ func (p *openstackProvider) createMachine(ctx context.Context, system *System) (
 		opts.SecurityGroupNames = sgNames
 	}
 
-	server, err := p.computeClient.RunServer(opts)
+	id, err := p.buildServer(ctx, system, name, opts)
 	if err != nil {
-		return nil, fmt.Errorf("cannot create instance: %v", &openstackError{err})
+		return nil, &FatalError{fmt.Errorf("cannot allocate new Openstack instance: %v", err)}
 	}
 
 	s := &openstackServer{
 		p: p,
 		d: openstackServerData{
-			Id:       server.Id,
+			Id:       id,
 			Name:     name,
 			Flavor:   flavor.Name,
 			Networks: system.Networks,
@@ -734,11 +747,7 @@ func (p *openstackProvider) createMachine(ctx context.Context, system *System) (
 
 		system: system,
 	}
-
-	err = p.waitProvision(ctx, s)
-	if err == nil {
-		s.address, err = p.address(ctx, s)
-	}
+	s.address, err = p.address(ctx, s)
 	if err == nil {
 		err = p.waitServerBoot(ctx, s)
 	}
@@ -747,7 +756,7 @@ func (p *openstackProvider) createMachine(ctx context.Context, system *System) (
 		if p.removeMachine(ctx, s) != nil {
 			return nil, &FatalError{fmt.Errorf("cannot allocate or deallocate (!) new Openstack instance %s: %v", s.d.Name, err)}
 		}
-		return nil, &FatalError{fmt.Errorf("cannot allocate new Openstack instance %s: %v", s.d.Name, err)}
+		return nil, &FatalError{fmt.Errorf("cannot deallocate new Openstack instance %s: %v", s.d.Name, err)}
 	}
 
 	return s, nil
@@ -919,7 +928,7 @@ func (p *openstackProvider) removeVolume(ctx context.Context, s *openstackServer
 }
 
 func (p *openstackProvider) GarbageCollect() error {
-	if err := p.checkKey(); err != nil {
+	if err := p.checkCredentials(); err != nil {
 		return err
 	}
 
@@ -1028,71 +1037,103 @@ func (p *openstackProvider) saveServices() error {
 	return nil
 }
 
-func (p *openstackProvider) checkKey() error {
+func (p *openstackProvider) checkCredentials() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if p.keyChecked {
-		return p.keyErr
+	if p.authComplete {
+		return p.authErr
 	}
 
 	var err error
-
-	if err == nil && p.computeClient == nil {
-
-		// Load environment variables used to authenticate
-		if p.backend.Key != "" {
-			godotenv.Load(p.backend.Key)
-		}
-
-		// retrieve variables used to authenticate from the environment
-		cred, err := identity.CompleteCredentialsFromEnv()
-		if err != nil {
-			return &FatalError{fmt.Errorf("cannot retrieve credentials from env: %v", err)}
-		}
-
-		// Select the appropriate authentication method
-		var authmode identity.AuthMode
-		if os.Getenv("OS_ACCESS_KEY") != "" && os.Getenv("OS_SECRET_KEY") != "" {
-			authmode = identity.AuthKeyPair
-		} else if os.Getenv("OS_USERNAME") != "" && os.Getenv("OS_PASSWORD") != "" {
-			authmode = identity.AuthUserPassV3
-			if cred.Version > 0 && cred.Version != 3 {
-				authmode = identity.AuthUserPass
-			}
-		} else {
-			return &FatalError{fmt.Errorf("cannot determine authentication method to use")}
-		}
-
-		// Create auth client
-		authClient := gooseclient.NewClient(cred, authmode, nil)
-		err = authClient.Authenticate()
-		if err != nil {
-			return &FatalError{fmt.Errorf("cannot authenticate: %v", &openstackError{err})}
-		}
-
-		// Create clients for the used modules
-		p.region = cred.Region
-		p.osClient = authClient
-		p.computeClient = nova.New(authClient)
-		p.networkClient = neutron.New(authClient)
-		p.imageClient = glance.New(authClient)
-
-		err = p.saveServices()
-		if err != nil {
-			return &FatalError{fmt.Errorf("failed to save services: %v", &openstackError{err})}
-		}
-
-		// Create cinder client
-		handleRequest := cinder.SetAuthHeaderFn(p.osClient.Token,
-			func(req *http.Request) (*http.Response, error) {
-				return http.DefaultClient.Do(req)
-			})
-		p.volumeClient = cinder.NewClient(p.osClient.TenantId(), p.services.volume.endpoint, handleRequest)
-		p.keyErr = err
+	if p.computeClient == nil {
+		err = p.authenticate()
+	}
+	if err != nil {
+		err = &FatalError{err}
 	}
 
-	p.keyChecked = true
-	p.keyErr = err
+	p.authComplete = true
+	p.authErr = err
 	return err
+}
+
+func (p *openstackProvider) authenticate() error {
+	// Only identity API v3 is currently supported
+	identityAPIVersion, err := getIdentityAPIVersion(p.backend.Endpoint)
+	if err != nil {
+		return fmt.Errorf("cannot obtain the identity API version: %w", err)
+	}
+	if identityAPIVersion != 3 {
+		return errors.New("identity API version not supported")
+	}
+
+	// The location entry contains project/region
+	var osproj, region string
+	loc := strings.SplitN(p.backend.Location, "/", 2)
+	if len(loc) != 2 {
+		return errors.New("cannot obtain project and region from location")
+	}
+	osproj, region = loc[0], loc[1]
+
+	// Authenticate using the project credentials.
+	creds := &identity.Credentials{
+		URL:        p.backend.Endpoint, // The authentication URL
+		User:       p.backend.Account,  // The username to authenticate as
+		Secrets:    p.backend.Key,      // The authentication secret
+		Region:     region,             // The OS region
+		TenantName: osproj,             // The OS project name
+		Version:    identityAPIVersion, // The identity API version
+	}
+	authClient := gooseclient.NewClient(creds, identity.AuthUserPassV3, nil)
+	if err := authClient.Authenticate(); err != nil {
+		err = fmt.Errorf("cannot authenticate: %v", &openstackError{err})
+	}
+
+	p.region = creds.Region
+	p.osClient = authClient
+	p.computeClient = nova.New(authClient)
+	p.networkClient = neutron.New(authClient)
+	p.imageClient = glance.New(authClient)
+
+	return nil
+}
+
+type openstackIdentityEndpointMediaTypes struct {
+	Base string
+	Type string
+}
+
+type openstackIdentityEndpointVersion struct {
+	MediaTypes []openstackIdentityEndpointMediaTypes `json:"media-types"`
+}
+
+type openstackIdentityEndpointInfo struct {
+	Version openstackIdentityEndpointVersion
+}
+
+func getIdentityAPIVersion(endpoint string) (int, error) {
+	resp, err := http.Get(endpoint)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("cannot request endpoint information (%s)", resp.Status)
+	}
+
+	var info openstackIdentityEndpointInfo
+	err = json.NewDecoder(resp.Body).Decode(&info)
+	if err != nil {
+		return 0, err
+	}
+
+	for _, mt := range info.Version.MediaTypes {
+		if mt.Type == "application/vnd.openstack.identity-v3+json" {
+			return 3, nil
+		}
+	}
+
+	return 0, errors.New("unsupported API version")
 }

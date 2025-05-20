@@ -66,7 +66,9 @@ type Backend struct {
 	Location string
 	Storage  Size
 
-	// Only for Openstack so far
+	// Only for OpenStack so far
+	Account  string
+	Endpoint string
 	Networks []string
 	Groups   []string
 
