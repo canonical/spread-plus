@@ -141,6 +141,8 @@ type System struct {
 
 	// Only for Linode and Google so far.
 	Storage Size
+	// Only for Linode and Google so far.
+	Ephemeral bool
 
 	// Only for Openstack so far
 	Networks []string
