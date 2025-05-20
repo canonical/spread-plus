@@ -18,7 +18,10 @@ backends:
                 workers: 1
 
     openstack:
-        key: '$(HOST: echo "$SPREAD_OPENSTACK_ENV")'
+        key: "$(HOST: echo $OS_PASSWORD)"
+        endpoint: "$(HOST: echo $OS_AUTH_URL)"
+        account: "$(HOST: echo $OS_USERNAME)"
+        location: '$(HOST: echo "$OS_PROJECT_NAME/$OS_REGION_NAME")'
         plan: staging-cpu2-ram4-disk20
         halt-timeout: 2h
         wait-timeout: 5m
@@ -36,8 +39,6 @@ backends:
                 workers: 1
 
     testflinger:
-        environment:
-            TRUST_TEST_KEYS: "false"
         wait-timeout: 30m
         kill-timeout: 40m
         systems:
@@ -47,6 +48,14 @@ backends:
                   workers: 1
                   username: ubuntu
                   password: ubuntu
+            - ubuntu-core-20-murcia:
+                queue: murcia-3200
+                image: core20-latest-stable
+                workers: 1
+                username: ubuntu
+                reserve-key: lp:sergio-j-cazzolato
+                ssh-rsa-key: '$(HOST: echo "$SPREAD_SSH_KEY")'
+                ssh-key-pass: '$(HOST: echo "$SPREAD_SSH_KEY_PASS")'
 
 exclude:
     - .spread-reuse.yaml

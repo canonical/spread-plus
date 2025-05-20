@@ -2,11 +2,11 @@ package spread
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -21,7 +21,6 @@ import (
 	"github.com/go-goose/goose/v5/neutron"
 	"github.com/go-goose/goose/v5/nova"
 
-	"github.com/joho/godotenv"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/net/context"
 )
@@ -75,8 +74,8 @@ type openstackProvider struct {
 
 	mu sync.Mutex
 
-	keyChecked bool
-	keyErr     error
+	authComplete bool
+	authErr      error
 }
 
 type openstackServer struct {
@@ -212,7 +211,7 @@ func (p *openstackProvider) Reuse(ctx context.Context, rsystem *ReuseSystem, sys
 }
 
 func (p *openstackProvider) Allocate(ctx context.Context, system *System) (Server, error) {
-	if err := p.checkKey(); err != nil {
+	if err := p.checkCredentials(); err != nil {
 		return nil, err
 	}
 
@@ -919,7 +918,7 @@ func (p *openstackProvider) removeVolume(ctx context.Context, s *openstackServer
 }
 
 func (p *openstackProvider) GarbageCollect() error {
-	if err := p.checkKey(); err != nil {
+	if err := p.checkCredentials(); err != nil {
 		return err
 	}
 
@@ -1028,71 +1027,115 @@ func (p *openstackProvider) saveServices() error {
 	return nil
 }
 
-func (p *openstackProvider) checkKey() error {
+func (p *openstackProvider) checkCredentials() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if p.keyChecked {
-		return p.keyErr
+	if p.authComplete {
+		return p.authErr
 	}
 
 	var err error
-
-	if err == nil && p.computeClient == nil {
-
-		// Load environment variables used to authenticate
-		if p.backend.Key != "" {
-			godotenv.Load(p.backend.Key)
-		}
-
-		// retrieve variables used to authenticate from the environment
-		cred, err := identity.CompleteCredentialsFromEnv()
-		if err != nil {
-			return &FatalError{fmt.Errorf("cannot retrieve credentials from env: %v", err)}
-		}
-
-		// Select the appropriate authentication method
-		var authmode identity.AuthMode
-		if os.Getenv("OS_ACCESS_KEY") != "" && os.Getenv("OS_SECRET_KEY") != "" {
-			authmode = identity.AuthKeyPair
-		} else if os.Getenv("OS_USERNAME") != "" && os.Getenv("OS_PASSWORD") != "" {
-			authmode = identity.AuthUserPassV3
-			if cred.Version > 0 && cred.Version != 3 {
-				authmode = identity.AuthUserPass
-			}
-		} else {
-			return &FatalError{fmt.Errorf("cannot determine authentication method to use")}
-		}
-
-		// Create auth client
-		authClient := gooseclient.NewClient(cred, authmode, nil)
-		err = authClient.Authenticate()
-		if err != nil {
-			return &FatalError{fmt.Errorf("cannot authenticate: %v", &openstackError{err})}
-		}
-
-		// Create clients for the used modules
-		p.region = cred.Region
-		p.osClient = authClient
-		p.computeClient = nova.New(authClient)
-		p.networkClient = neutron.New(authClient)
-		p.imageClient = glance.New(authClient)
-
-		err = p.saveServices()
-		if err != nil {
-			return &FatalError{fmt.Errorf("failed to save services: %v", &openstackError{err})}
-		}
-
-		// Create cinder client
-		handleRequest := cinder.SetAuthHeaderFn(p.osClient.Token,
-			func(req *http.Request) (*http.Response, error) {
-				return http.DefaultClient.Do(req)
-			})
-		p.volumeClient = cinder.NewClient(p.osClient.TenantId(), p.services.volume.endpoint, handleRequest)
-		p.keyErr = err
+	if p.computeClient == nil {
+		err = p.authenticate()
+	}
+	if err != nil {
+		err = &FatalError{err}
 	}
 
-	p.keyChecked = true
-	p.keyErr = err
+	p.authComplete = true
+	p.authErr = err
 	return err
+}
+
+func (p *openstackProvider) authenticate() error {
+	// Only identity API v3 is currently supported
+	identityAPIVersion, err := getIdentityAPIVersion(p.backend.Endpoint)
+	if err != nil {
+		return fmt.Errorf("cannot obtain the identity API version: %w", err)
+	}
+	if identityAPIVersion != 3 {
+		return errors.New("identity API version not supported")
+	}
+
+	// The location entry contains project/region
+	var osproj, region string
+	loc := strings.SplitN(p.backend.Location, "/", 2)
+	if len(loc) != 2 {
+		return errors.New("cannot obtain project and region from location")
+	}
+	osproj, region = loc[0], loc[1]
+
+	// Authenticate using the project credentials.
+	creds := &identity.Credentials{
+		URL:        p.backend.Endpoint, // The authentication URL
+		User:       p.backend.Account,  // The username to authenticate as
+		Secrets:    p.backend.Key,      // The authentication secret
+		Region:     region,             // The OS region
+		TenantName: osproj,             // The OS project name
+		Version:    identityAPIVersion, // The identity API version
+	}
+
+	authClient := gooseclient.NewClient(creds, identity.AuthUserPassV3, nil)
+	if err := authClient.Authenticate(); err != nil {
+		err = fmt.Errorf("cannot authenticate: %v", &openstackError{err})
+	}
+
+	p.region = creds.Region
+	p.osClient = authClient
+	p.computeClient = nova.New(authClient)
+	p.networkClient = neutron.New(authClient)
+	p.imageClient = glance.New(authClient)
+
+	err = p.saveServices()
+	if err != nil {
+		return &FatalError{fmt.Errorf("failed to save services: %v", &openstackError{err})}
+	}
+
+	// Create cinder client
+	handleRequest := cinder.SetAuthHeaderFn(p.osClient.Token,
+		func(req *http.Request) (*http.Response, error) {
+			return http.DefaultClient.Do(req)
+		})
+	p.volumeClient = cinder.NewClient(p.osClient.TenantId(), p.services.volume.endpoint, handleRequest)
+
+	return nil
+}
+
+type openstackIdentityEndpointMediaTypes struct {
+	Base string
+	Type string
+}
+
+type openstackIdentityEndpointVersion struct {
+	MediaTypes []openstackIdentityEndpointMediaTypes `json:"media-types"`
+}
+
+type openstackIdentityEndpointInfo struct {
+	Version openstackIdentityEndpointVersion
+}
+
+func getIdentityAPIVersion(endpoint string) (int, error) {
+	resp, err := http.Get(endpoint)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("cannot request endpoint information (%s)", resp.Status)
+	}
+
+	var info openstackIdentityEndpointInfo
+	err = json.NewDecoder(resp.Body).Decode(&info)
+	if err != nil {
+		return 0, err
+	}
+
+	for _, mt := range info.Version.MediaTypes {
+		if mt.Type == "application/vnd.openstack.identity-v3+json" {
+			return 3, nil
+		}
+	}
+
+	return 0, errors.New("unsupported API version")
 }
