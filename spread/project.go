@@ -1112,6 +1112,32 @@ func (p *Project) Jobs(options *Options) ([]*Job, error) {
 		}
 		backend.Key = strings.TrimSpace(value)
 
+		// Eval the backend account, endpoint and location to allow getting those from env vars
+		if backend.Account != "" {
+			benv := envmap{backend, backend.Environment}
+			value, err := evalone(bname+" backend account", backend.Account, cmdcache, true, penv, benv)
+			if err != nil {
+				return nil, err
+			}
+			backend.Account = strings.TrimSpace(value)
+		}
+		if backend.Endpoint != "" {
+			benv := envmap{backend, backend.Environment}
+			value, err := evalone(bname+" backend endpoint", backend.Endpoint, cmdcache, true, penv, benv)
+			if err != nil {
+				return nil, err
+			}
+			backend.Endpoint = strings.TrimSpace(value)
+		}
+		if backend.Location != "" {
+			benv := envmap{backend, backend.Environment}
+			value, err := evalone(bname+" backend location", backend.Location, cmdcache, true, penv, benv)
+			if err != nil {
+				return nil, err
+			}
+			backend.Location = strings.TrimSpace(value)
+		}
+
 		for _, system := range backend.Systems {
 			if system.Username != "" {
 				value, err := evalone(system.String()+" username", system.Username, cmdcache, false, penv, benv)

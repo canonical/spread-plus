@@ -1085,6 +1085,7 @@ func (p *openstackProvider) authenticate() error {
 		TenantName: osproj,             // The OS project name
 		Version:    identityAPIVersion, // The identity API version
 	}
+
 	authClient := gooseclient.NewClient(creds, identity.AuthUserPassV3, nil)
 	if err := authClient.Authenticate(); err != nil {
 		err = fmt.Errorf("cannot authenticate: %v", &openstackError{err})
@@ -1095,6 +1096,18 @@ func (p *openstackProvider) authenticate() error {
 	p.computeClient = nova.New(authClient)
 	p.networkClient = neutron.New(authClient)
 	p.imageClient = glance.New(authClient)
+
+	err = p.saveServices()
+	if err != nil {
+		return &FatalError{fmt.Errorf("failed to save services: %v", &openstackError{err})}
+	}
+
+	// Create cinder client
+	handleRequest := cinder.SetAuthHeaderFn(p.osClient.Token,
+		func(req *http.Request) (*http.Response, error) {
+			return http.DefaultClient.Do(req)
+		})
+	p.volumeClient = cinder.NewClient(p.osClient.TenantId(), p.services.volume.endpoint, handleRequest)
 
 	return nil
 }
@@ -1118,7 +1131,6 @@ func getIdentityAPIVersion(endpoint string) (int, error) {
 		return 0, err
 	}
 	defer resp.Body.Close()
-
 	if resp.StatusCode != http.StatusOK {
 		return 0, fmt.Errorf("cannot request endpoint information (%s)", resp.Status)
 	}
