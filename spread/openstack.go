@@ -238,9 +238,7 @@ runcmd:
   - test -d /etc/ssh/sshd_config.d && echo 'PermitRootLogin=yes' > /etc/ssh/sshd_config.d/00-spread.conf
   - test -d /etc/ssh/sshd_config.d && echo 'PasswordAuthentication=yes' >> /etc/ssh/sshd_config.d/00-spread.conf
   - pkill -o -HUP sshd || true
-  - test -c /dev/ttyS0 && echo '` + openstackReadyMarker + `' 1>/dev/ttyS0 2>/dev/null || true
-  - test -c /dev/ttyAMA0 && echo '` + openstackReadyMarker + `' 1>/dev/ttyAMA0 2>/dev/null || true
-  - test -c /dev/console && echo '` + openstackReadyMarker + `' 1>/dev/console 2>/dev/null || true
+  - echo '` + openstackReadyMarker + `' > /dev/ttyS0
 `
 
 const openstackReadyMarker = "MACHINE-IS-READY"
@@ -429,18 +427,17 @@ func (p *openstackProvider) findSecurityGroupNames(names []string) ([]nova.Secur
 	return secGroupNames, nil
 }
 
-var openstackProvisionTimeout = 30 * time.Minute
-var openstackProvisionRetry = 10 * time.Second
-var openstackProvisionRerun = 2 * time.Minute
+var openstackProvisionTimeout = 3 * time.Minute
+var openstackProvisionRetry = 5 * time.Second
 
-func (p *openstackProvider) saveProvisioningOutput(name string, detail *nova.ServerDetail) error {
+func (p *openstackProvider) saveProvisioningOutput(s *openstackServer, detail *nova.ServerDetail) error {
 	// output is saved just if the status is error and fault object set
 	if detail.Status != nova.StatusError || detail.Fault == nil {
 		return nil
 	}
 
 	// Use the name to identify the file
-	resultsFile := name + ".result.log"
+	resultsFile := s.d.Name + ".result.log"
 
 	// Build the output to write to the log
 	var buffer bytes.Buffer
@@ -452,68 +449,57 @@ func (p *openstackProvider) saveProvisioningOutput(name string, detail *nova.Ser
 		return err
 	}
 
-	printf("Allocation output for instance %s saved to %s/%s", name, p.options.Logs, resultsFile)
+	printf("Allocation output for instance %s saved to %s/%s", s.d.Name, p.options.Logs, resultsFile)
 	return nil
 }
 
-func (p *openstackProvider) buildServer(ctx context.Context, system *System, name string, opts nova.RunServerOpts) (string, error) {
+func (p *openstackProvider) waitProvision(ctx context.Context, s *openstackServer) error {
+	debugf("Waiting for %s to provision...", s)
 
-	wait_timeout := system.WaitTimeout.Duration
+	wait_timeout := s.system.WaitTimeout.Duration
 	timeout := time.After(openstackProvisionTimeout)
-	if wait_timeout > 0 {
+	if wait_timeout != 0 {
 		timeout = time.After(wait_timeout)
 	}
 	retry := time.NewTicker(openstackProvisionRetry)
-	rerun := time.NewTicker(openstackProvisionRerun)
 	defer retry.Stop()
-	defer rerun.Stop()
-
-	status := ""
-	server, err := p.computeClient.RunServer(opts)
-	if err != nil {
-		return "", fmt.Errorf("cannot create instance: %v", &openstackError{err})
-	}
 
 	for {
 		select {
 		case <-timeout:
-			return "", fmt.Errorf("timeout waiting trying to build server")
+			server, err := p.computeClient.GetServer(s.d.Id)
+			if err != nil {
+				return fmt.Errorf("timeout waiting for %s to provision", s.d.Id)
+			}
+			if server.Fault == nil {
+				return fmt.Errorf("timeout waiting for %s to provision, status: %s", s.d.Id, server.Status)
+			}
+			return fmt.Errorf("timeout waiting for %s to provision, error: %s", s, server.Fault.Message)
 
 		case <-retry.C:
-			if status == nova.StatusError {
-				continue
-			}
-			server, err := p.computeClient.GetServer(server.Id)
+			server, err := p.computeClient.GetServer(s.d.Id)
 			if err != nil {
 				debugf("cannot get instance info: %v", &openstackError{err})
 				continue
 			}
-			if server.Status == nova.StatusActive {
-				return server.Id, nil
-			} else if server.Status == nova.StatusError {
-				status = nova.StatusError
-				if p.options.Logs != "" {
-					// Use the uuid to identify the file
-					err = p.saveProvisioningOutput(name, server)
-					if err != nil {
-						return "", fmt.Errorf("error saving provisioning result output: %v", err)
+			if server.Status != nova.StatusBuild {
+				if server.Status != nova.StatusActive {
+					if p.options.Logs != "" {
+						// Use the uuid to identify the file
+						err = p.saveProvisioningOutput(s, server)
+						if err != nil {
+							return fmt.Errorf("error saving provisioning result output: %v", err)
+						}
 					}
+					if server.Status != nova.StatusError || server.Fault == nil {
+						return fmt.Errorf("cannot use server with status %s", server.Status)
+					}
+					return fmt.Errorf(server.Fault.Message)
 				}
-				printf("Cannot allocate server %s: %s, retrying...", name, server.Fault.Message)
-				err := p.computeClient.DeleteServer(server.Id)
-				if err != nil {
-					return "", fmt.Errorf("cannot remove openstack instance: %v", &openstackError{err})
-				}
-				continue
-			}
-		case <-rerun.C:
-			status = ""
-			server, err = p.computeClient.RunServer(opts)
-			if err != nil {
-				return "", fmt.Errorf("cannot create instance: %v", &openstackError{err})
+				return nil
 			}
 		case <-ctx.Done():
-			return "", fmt.Errorf("cannot wait for %s to provision: interrupted", server.Id)
+			return fmt.Errorf("cannot wait for %s to provision: interrupted", s)
 		}
 	}
 }
@@ -729,15 +715,15 @@ func (p *openstackProvider) createMachine(ctx context.Context, system *System) (
 		opts.SecurityGroupNames = sgNames
 	}
 
-	id, err := p.buildServer(ctx, system, name, opts)
+	server, err := p.computeClient.RunServer(opts)
 	if err != nil {
-		return nil, &FatalError{fmt.Errorf("cannot allocate new Openstack instance: %v", err)}
+		return nil, fmt.Errorf("cannot create instance: %v", &openstackError{err})
 	}
 
 	s := &openstackServer{
 		p: p,
 		d: openstackServerData{
-			Id:       id,
+			Id:       server.Id,
 			Name:     name,
 			Flavor:   flavor.Name,
 			Networks: system.Networks,
@@ -747,7 +733,11 @@ func (p *openstackProvider) createMachine(ctx context.Context, system *System) (
 
 		system: system,
 	}
-	s.address, err = p.address(ctx, s)
+
+	err = p.waitProvision(ctx, s)
+	if err == nil {
+		s.address, err = p.address(ctx, s)
+	}
 	if err == nil {
 		err = p.waitServerBoot(ctx, s)
 	}
@@ -756,7 +746,7 @@ func (p *openstackProvider) createMachine(ctx context.Context, system *System) (
 		if p.removeMachine(ctx, s) != nil {
 			return nil, &FatalError{fmt.Errorf("cannot allocate or deallocate (!) new Openstack instance %s: %v", s.d.Name, err)}
 		}
-		return nil, &FatalError{fmt.Errorf("cannot deallocate new Openstack instance %s: %v", s.d.Name, err)}
+		return nil, &FatalError{fmt.Errorf("cannot allocate new Openstack instance %s: %v", s.d.Name, err)}
 	}
 
 	return s, nil
