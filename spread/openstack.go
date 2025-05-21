@@ -238,7 +238,9 @@ runcmd:
   - test -d /etc/ssh/sshd_config.d && echo 'PermitRootLogin=yes' > /etc/ssh/sshd_config.d/00-spread.conf
   - test -d /etc/ssh/sshd_config.d && echo 'PasswordAuthentication=yes' >> /etc/ssh/sshd_config.d/00-spread.conf
   - pkill -o -HUP sshd || true
-  - echo '` + openstackReadyMarker + `' > /dev/ttyS0
+  - test -c /dev/ttyS0 && echo '` + openstackReadyMarker + `' 1>/dev/ttyS0 2>/dev/null || true
+  - test -c /dev/ttyAMA0 && echo '` + openstackReadyMarker + `' 1>/dev/ttyAMA0 2>/dev/null || true
+  - test -c /dev/console && echo '` + openstackReadyMarker + `' 1>/dev/console 2>/dev/null || true
 `
 
 const openstackReadyMarker = "MACHINE-IS-READY"
