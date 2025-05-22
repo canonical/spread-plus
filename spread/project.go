@@ -67,8 +67,6 @@ type Backend struct {
 	Storage  Size
 
 	// Only for OpenStack so far
-	Account  string
-	Endpoint string
 	Networks []string
 	Groups   []string
 
@@ -1111,32 +1109,6 @@ func (p *Project) Jobs(options *Options) ([]*Job, error) {
 			return nil, err
 		}
 		backend.Key = strings.TrimSpace(value)
-
-		// Eval the backend account, endpoint and location to allow getting those from env vars
-		if backend.Account != "" {
-			benv := envmap{backend, backend.Environment}
-			value, err := evalone(bname+" backend account", backend.Account, cmdcache, true, penv, benv)
-			if err != nil {
-				return nil, err
-			}
-			backend.Account = strings.TrimSpace(value)
-		}
-		if backend.Endpoint != "" {
-			benv := envmap{backend, backend.Environment}
-			value, err := evalone(bname+" backend endpoint", backend.Endpoint, cmdcache, true, penv, benv)
-			if err != nil {
-				return nil, err
-			}
-			backend.Endpoint = strings.TrimSpace(value)
-		}
-		if backend.Location != "" {
-			benv := envmap{backend, backend.Environment}
-			value, err := evalone(bname+" backend location", backend.Location, cmdcache, true, penv, benv)
-			if err != nil {
-				return nil, err
-			}
-			backend.Location = strings.TrimSpace(value)
-		}
 
 		for _, system := range backend.Systems {
 			if system.Username != "" {
