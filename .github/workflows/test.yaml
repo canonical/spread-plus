@@ -68,12 +68,6 @@ jobs:
             spread -discard -reuse-pid="$(echo "$r" | grep -o -E '[0-9]+')";
           done
 
-    - name: Cleanup job workspace after run tests
-      if: always()
-      run: |
-          rm -rf "${{ github.workspace }}"
-          mkdir "${{ github.workspace }}"
-
   smoke-tests-google:
     name: Smoke Tests in Google
     needs: [build]
@@ -109,12 +103,6 @@ jobs:
           for r in .spread-reuse.*.yaml; do
             spread -discard -reuse-pid="$(echo "$r" | grep -o -E '[0-9]+')";
           done
-
-    - name: Cleanup job workspace after run tests
-      if: always()
-      run: |
-          rm -rf "${{ github.workspace }}"
-          mkdir "${{ github.workspace }}"
 
   smoke-tests-openstack-amd64:
     name: Smoke Tests in Openstack (amd64)
@@ -166,12 +154,6 @@ jobs:
             spread -discard -reuse-pid="$(echo "$r" | grep -o -E '[0-9]+')";
           done
 
-    - name: Cleanup job workspace after run tests
-      if: always()
-      run: |
-          rm -rf "${{ github.workspace }}"
-          mkdir "${{ github.workspace }}"
-  
   smoke-tests-openstack-arm64:
     name: Smoke Tests in Openstack (arm64)
     needs: [build]
@@ -222,12 +204,6 @@ jobs:
             spread -discard -reuse-pid="$(echo "$r" | grep -o -E '[0-9]+')";
           done
 
-    - name: Cleanup job workspace after run tests
-      if: always()
-      run: |
-          rm -rf "${{ github.workspace }}"
-          mkdir "${{ github.workspace }}"
-
   smoke-tests-testflinger:
     name: Smoke Tests in Testflinger
     needs: [build]
@@ -262,12 +238,6 @@ jobs:
           for r in .spread-reuse.*.yaml; do
             spread -discard -reuse-pid="$(echo "$r" | grep -o -E '[0-9]+')";
           done
-
-    - name: Cleanup job workspace after run tests
-      if: always()
-      run: |
-          rm -rf "${{ github.workspace }}"
-          mkdir "${{ github.workspace }}"
 
   upload:
     name: Upload binary to GCE
@@ -306,9 +276,3 @@ jobs:
       if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       run: |
           gcloud auth revoke
-
-    - name: Cleanup job workspace after run tests
-      if: always()
-      run: |
-          rm -rf "${{ github.workspace }}"
-          mkdir "${{ github.workspace }}"
