@@ -27,7 +27,7 @@ jobs:
       run: |
           go build -o spread-plus cmd/spread/main.go
 
-    - name: Upload spread logs
+    - name: Upload spread binary to cache
       uses: actions/upload-artifact@v4
       with:
         name: "spread-plus-${{ github.run_id }}"
@@ -160,7 +160,16 @@ jobs:
               exit
           fi
           cd "${{ github.workspace }}"/smoke
-          "${{ github.workspace }}/bin/spread-plus" openstack:tests/
+          chmod +x "${{ github.workspace }}"/bin/spread-plus
+
+          BACKEND=openstack
+          if [ ${{ matrix.environment }} == OS_AMD64_PS7 ]; then
+              BACKEND=openstack-ps7
+          elif [ ${{ matrix.environment }} == OS_ARM64_PS7 ]; then
+              BACKEND=openstack-arm-ps7
+          fi
+
+          "${{ github.workspace }}/bin/spread-plus" "$BACKEND":tests/
 
     - name: Discard spread workers
       if: always()
@@ -200,6 +209,7 @@ jobs:
     - name: Smoke tests with testflinger backend
       run: |
           cd "${{ github.workspace }}"/smoke
+          chmod +x "${{ github.workspace }}"/bin/spread-plus
           "${{ github.workspace }}/bin/spread-plus" testflinger:tests/
   
     - name: Discard spread workers
