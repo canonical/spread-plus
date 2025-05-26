@@ -19,9 +19,6 @@ backends:
 
     openstack:
         key: "$(HOST: echo $OS_PASSWORD)"
-        endpoint: "$(HOST: echo $OS_AUTH_URL)"
-        account: "$(HOST: echo $OS_USERNAME)"
-        location: '$(HOST: echo "$OS_PROJECT_NAME/$OS_REGION_NAME")'
         plan: staging-cpu2-ram4-disk20
         halt-timeout: 2h
         wait-timeout: 5m
@@ -36,6 +33,44 @@ backends:
         systems:
             - ubuntu-24.04-64:
                 image: snapd-spread/ubuntu-24.04-64
+                workers: 1
+
+    openstack-ps7:
+        type: openstack
+        key: '$(HOST: echo "$OS_CREDENTIALS_AMD64_PS7")'
+        plan: shared.xsmall
+        halt-timeout: 2h
+        wait-timeout: 5m
+        groups: [default]
+        proxy: ingress-haproxy.ps7.canonical.com
+        cidr-port-rel: [10.151.54.0/24:4000]
+        environment:
+            HTTP_PROXY: 'http://egress.ps7.internal:3128'
+            HTTPS_PROXY: 'http://egress.ps7.internal:3128'
+            http_proxy: 'http://egress.ps7.internal:3128'
+            https_proxy: 'http://egress.ps7.internal:3128'
+        systems:
+            - ubuntu-22.04-64:
+                image: auto-sync/ubuntu-noble-22.04-amd64-server
+                workers: 1
+
+    openstack-arm-ps7:
+        type: openstack
+        key: '$(HOST: echo "$OS_CREDENTIALS_ARM64_PS7")'
+        plan: shared.xsmall.arm64
+        halt-timeout: 2h
+        wait-timeout: 5m
+        groups: [default]
+        proxy: ingress-haproxy.ps7.canonical.com
+        cidr-port-rel: [10.151.53.0/24:3000]
+        environment:
+            HTTP_PROXY: 'http://egress.ps7.internal:3128'
+            HTTPS_PROXY: 'http://egress.ps7.internal:3128'
+            http_proxy: 'http://egress.ps7.internal:3128'
+            https_proxy: 'http://egress.ps7.internal:3128'
+        systems:
+            - ubuntu-22.04-arm-64:
+                image: auto-sync/ubuntu-noble-22.04-arm64-server
                 workers: 1
 
     testflinger:

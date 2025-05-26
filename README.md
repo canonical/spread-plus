@@ -1129,6 +1129,9 @@ When these machines terminate running, they will be removed. If anything
 happens that prevents the immediate removal, they will remain in the account
 and need to be removed by hand.
 
+When access to the VM must go through a proxy, the proxy configuration should be specified using the proxy key. Additionally, a mapping between the destination IP address and the proxy port must be defined.
+
+To configure the IP-port mapping, use the cidr-port-rel key. This requires a list of entries in the format "CIDR:initial-port". Based on this list, the system will assign a port by matching the allocated IP with the corresponding CIDR and applying the specified initial port.
 
 <a name="linode"/>
 

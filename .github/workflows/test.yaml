@@ -120,7 +120,7 @@ jobs:
               exit
           fi
           cd "${{ github.workspace }}"/smoke
-          "${{ github.workspace }}/bin/spread-plus" openstack:tests/
+          "${{ github.workspace }}/bin/spread-plus" openstack:tests/ openstack-ps7:tests/ openstack-arm-ps7:tests/
 
     - name: Smoke tests with testflinger backend
       env:
