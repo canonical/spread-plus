@@ -74,8 +74,8 @@ jobs:
           rm -rf "${{ github.workspace }}"
           mkdir "${{ github.workspace }}"
 
-  smoke-tests:
-    name: Smoke Tests
+  smoke-tests-google:
+    name: Smoke Tests in Google
     needs: [build]
     runs-on: [self-hosted, spread-enabled]
 
@@ -102,6 +102,46 @@ jobs:
           chmod +x "${{ github.workspace }}"/bin/spread-plus
           "${{ github.workspace }}/bin/spread-plus" google:tests/
 
+    - name: Discard spread workers
+      if: always()
+      run: |
+          shopt -s nullglob;
+          for r in .spread-reuse.*.yaml; do
+            spread -discard -reuse-pid="$(echo "$r" | grep -o -E '[0-9]+')";
+          done
+
+    - name: Cleanup job workspace after run tests
+      if: always()
+      run: |
+          rm -rf "${{ github.workspace }}"
+          mkdir "${{ github.workspace }}"
+
+  smoke-tests-openstack:
+    name: Smoke Tests in Openstack (${{ matrix.environment }})
+    needs: [build]
+    runs-on: [self-hosted, spread-enabled]
+
+    strategy:
+      matrix:
+        environment: [OS_AMD64_PS6, OS_AMD64_PS7, OS_ARM64_PS7]
+
+    environment: ${{ matrix.environment }}
+
+    steps:
+    - name: Ensure the workspace is clean
+      run: |
+          rm -rf "${{ github.workspace }}"
+          mkdir "${{ github.workspace }}"
+
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download spread-plus
+      uses: actions/download-artifact@v4
+      with:
+        name: "spread-plus-${{ github.run_id }}"
+        path: "${{ github.workspace }}/bin"
+
     - name: Smoke tests with openstack backend
       env:
           OS_AUTH_URL: ${{ secrets.OS_AUTH_URL }}
@@ -120,17 +160,45 @@ jobs:
               exit
           fi
           cd "${{ github.workspace }}"/smoke
-          "${{ github.workspace }}/bin/spread-plus" openstack:tests/ openstack-ps7:tests/ openstack-arm-ps7:tests/
+          "${{ github.workspace }}/bin/spread-plus" openstack:tests/
+
+    - name: Discard spread workers
+      if: always()
+      run: |
+          shopt -s nullglob;
+          for r in .spread-reuse.*.yaml; do
+            spread -discard -reuse-pid="$(echo "$r" | grep -o -E '[0-9]+')";
+          done
+
+    - name: Cleanup job workspace after run tests
+      if: always()
+      run: |
+          rm -rf "${{ github.workspace }}"
+          mkdir "${{ github.workspace }}"
+
+  smoke-tests-testflinger:
+    name: Smoke Tests in Testflinger
+    needs: [build]
+    runs-on: [self-hosted, spread-enabled]
+    if: ${{ vars.SKIP_TESTFLINGER == 'false' }}
+
+    steps:
+    - name: Ensure the workspace is clean
+      run: |
+          rm -rf "${{ github.workspace }}"
+          mkdir "${{ github.workspace }}"
+
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download spread-plus
+      uses: actions/download-artifact@v4
+      with:
+        name: "spread-plus-${{ github.run_id }}"
+        path: "${{ github.workspace }}/bin"
 
     - name: Smoke tests with testflinger backend
-      env:
-          TF_SKIP: ${{ vars.SKIP_TESTFLINGER }}
-
       run: |
-          if [ "$TF_SKIP" == true ]; then
-              echo "Skipping testflinger smoke tests..."
-              exit
-          fi
           cd "${{ github.workspace }}"/smoke
           "${{ github.workspace }}/bin/spread-plus" testflinger:tests/
   
@@ -151,7 +219,7 @@ jobs:
   upload:
     name: Upload binary to GCE
     runs-on: ubuntu-latest
-    needs: [integration-tests, smoke-tests]
+    needs: [integration-tests, smoke-tests-google, smoke-tests-openstack, smoke-tests-testflinger]
 
     steps:
     - name: Download spread-plus
