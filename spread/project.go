@@ -66,6 +66,12 @@ type Backend struct {
 	Location string
 	Storage  Size
 
+	// Only for Openstack, this is a temporal solution
+	// TODO: Remove once it is possible to ssh to PS7/PS8
+	Proxy string
+	// the expected format is a list of CIDR:port
+	CIDRPortRel []string `yaml:"cidr-port-rel"`
+
 	// Only for OpenStack so far
 	Networks []string
 	Groups   []string

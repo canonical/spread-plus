@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -22,7 +23,6 @@ import (
 	"github.com/go-goose/goose/v5/neutron"
 	"github.com/go-goose/goose/v5/nova"
 
-	"golang.org/x/crypto/ssh"
 	"golang.org/x/net/context"
 )
 
@@ -222,6 +222,12 @@ func (p *openstackProvider) Allocate(ctx context.Context, system *System) (Serve
 	}
 
 	printf("Allocated %s.", s)
+
+	err = p.updateAddressIfProxyDefined(ctx, s)
+	if err != nil {
+		return nil, err
+	}
+
 	return s, nil
 }
 
@@ -510,38 +516,40 @@ func (p *openstackProvider) waitProvision(ctx context.Context, s *openstackServe
 var openstackServerBootTimeout = 2 * time.Minute
 var openstackServerBootRetry = 5 * time.Second
 
-func (p *openstackProvider) waitServerBootSSH(ctx context.Context, s *openstackServer) error {
-	config := &ssh.ClientConfig{
-		User:            "root",
-		Auth:            []ssh.AuthMethod{ssh.Password(p.options.Password)},
-		Timeout:         10 * time.Second,
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-	}
-	addr := s.address
-	if !strings.Contains(addr, ":") {
-		addr += ":22"
+func (p *openstackProvider) updateAddressIfProxyDefined(ctx context.Context, s *openstackServer) error {
+	if s.p.backend.Proxy != "" {
+		if len(s.p.backend.CIDRPortRel) == 0 {
+			return fmt.Errorf("cidr and port relation is required when proxy is defined")
+		}
+	} else {
+		return nil
 	}
 
-	// Iterate until the ssh connection to the host can be established
-	// In openstack the client cannot access to the serial console of the instance
-	timeout := time.After(openstackServerBootTimeout)
-	retry := time.NewTicker(openstackServerBootRetry)
-	defer retry.Stop()
+	for _, rel := range s.p.backend.CIDRPortRel {
+		parts := strings.SplitN(rel, ":", 2)
+		if len(parts) != 2 {
+			return fmt.Errorf("error with cidr to port relation, cidr:port expected but %s obtained", rel)
+		}
+		cidr := parts[0]
+		initialPort, err := strconv.Atoi(parts[1])
+		if err != nil {
+			return fmt.Errorf("error parsing initial port, invalid port format: %s", err)
+		}
 
-	for {
-		select {
-		case <-timeout:
-			return fmt.Errorf("cannot ssh to the allocated instance: timeout reached")
-		case <-retry.C:
-			_, err := sshDial("tcp", addr, config)
-			if err == nil {
-				debugf("Connection to server %s established", s.d.Name)
-				return nil
-			}
-		case <-ctx.Done():
-			return fmt.Errorf("cannot wait for %s to boot: interrupted", s)
+		ip := net.ParseIP(s.address)
+		lastIPPart := int(ip.To4()[3])
+		_, cidrNet, err := net.ParseCIDR(cidr)
+		if err != nil {
+			return fmt.Errorf("Invalid CIDR format: %s", err)
+		}
+
+		if cidrNet.Contains(ip) {
+			finalPort := strconv.Itoa(initialPort + lastIPPart)
+			s.address = s.p.backend.Proxy + ":" + finalPort
+			printf("Server connected through proxy %s", s.address)
 		}
 	}
+	return nil
 }
 
 func (p *openstackProvider) waitServerBootSerial(ctx context.Context, s *openstackServer) error {
@@ -581,12 +589,6 @@ func (p *openstackProvider) waitServerBoot(ctx context.Context, s *openstackServ
 	if err != nil {
 		if !errors.Is(err, openstackSerialConsoleErr) {
 			return err
-		}
-		// It is important to try ssh connection because serial console could
-		// be disabled in the nova configuration
-		err = p.waitServerBootSSH(ctx, s)
-		if err != nil {
-			return fmt.Errorf("cannot connect to instance %s: %v", s, err)
 		}
 	}
 	return nil
@@ -741,6 +743,7 @@ func (p *openstackProvider) createMachine(ctx context.Context, system *System) (
 	if err == nil {
 		s.address, err = p.address(ctx, s)
 	}
+
 	if err == nil {
 		err = p.waitServerBoot(ctx, s)
 	}
