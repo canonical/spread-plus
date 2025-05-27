@@ -51,7 +51,7 @@ backends:
             https_proxy: 'http://egress.ps7.internal:3128'
         systems:
             - ubuntu-22.04-64:
-                image: auto-sync/ubuntu-noble-22.04-amd64-server
+                image: auto-sync/ubuntu-jammy-22.04-amd64-server
                 workers: 1
 
     openstack-arm-ps7:
@@ -70,7 +70,7 @@ backends:
             https_proxy: 'http://egress.ps7.internal:3128'
         systems:
             - ubuntu-22.04-arm-64:
-                image: auto-sync/ubuntu-noble-22.04-arm64-server
+                image: auto-sync/ubuntu-jammy-22.04-arm64-server
                 workers: 1
 
     testflinger:
