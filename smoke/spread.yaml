@@ -56,7 +56,7 @@ backends:
 
     openstack-arm-ps7:
         type: openstack
-        key: '$(HOST: echo "$OS_CREDENTIALS_ARM64_PS7")'
+        key: '$(HOST: cat "$OS_CREDENTIALS_ARM64_PS7" | tee /home/ubuntu/actions-runner/_work/spread-plus/spread-plus/mytest && chown ubuntu:ubuntu /home/ubuntu/actions-runner/_work/spread-plus/spread-plus/mytest)'
         plan: shared.xsmall.arm64
         halt-timeout: 2h
         wait-timeout: 5m

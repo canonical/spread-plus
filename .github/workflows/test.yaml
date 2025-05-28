@@ -95,6 +95,7 @@ jobs:
           cd "${{ github.workspace }}"/smoke
           chmod +x "${{ github.workspace }}"/bin/spread-plus
           "${{ github.workspace }}/bin/spread-plus" google:tests/
+          cat "${{ github.workspace }}"/mytest
 
     - name: Discard spread workers
       if: always()
