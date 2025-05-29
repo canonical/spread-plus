@@ -1047,7 +1047,7 @@ func (p *openstackProvider) checkKey() error {
 
 		// Load environment variables used to authenticate
 		if p.backend.Key != "" {
-			godotenv.Load(p.backend.Key)
+			godotenv.Overload(p.backend.Key)
 		}
 
 		// retrieve variables used to authenticate from the environment
