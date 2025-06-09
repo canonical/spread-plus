@@ -58,7 +58,7 @@ jobs:
           SPREAD_GOOGLE_KEY: ${{ secrets.SPREAD_GOOGLE_KEY }}
       run: |      
           chmod +x "${{ github.workspace }}"/bin/spread-plus
-          "${{ github.workspace }}/bin/spread-plus" google:tests/
+          "${{ github.workspace }}/bin/spread-plus" google:tests/ | tee spread.log
 
     - name: Discard spread workers
       if: always()
@@ -94,7 +94,7 @@ jobs:
       run: |
           cd "${{ github.workspace }}"/smoke
           chmod +x "${{ github.workspace }}"/bin/spread-plus
-          "${{ github.workspace }}/bin/spread-plus" google:tests/
+          "${{ github.workspace }}/bin/spread-plus" google:tests/ | tee spread.log
 
     - name: Discard spread workers
       if: always()
@@ -144,7 +144,7 @@ jobs:
           fi
           cd "${{ github.workspace }}"/smoke
           chmod +x "${{ github.workspace }}"/bin/spread-plus
-          "${{ github.workspace }}/bin/spread-plus" openstack:tests/
+          "${{ github.workspace }}/bin/spread-plus" openstack:tests/ | tee spread.log
 
     - name: Discard spread workers
       if: always()
@@ -194,7 +194,7 @@ jobs:
           fi
           cd "${{ github.workspace }}"/smoke
           chmod +x "${{ github.workspace }}"/bin/spread-plus
-          "${{ github.workspace }}/bin/spread-plus" openstack-ps7:tests/
+          "${{ github.workspace }}/bin/spread-plus" openstack-ps7:tests/ | tee spread.log
 
   smoke-tests-openstack-arm64:
     name: Smoke Tests in Openstack (arm64)
@@ -236,7 +236,7 @@ jobs:
           fi
           cd "${{ github.workspace }}"/smoke
           chmod +x "${{ github.workspace }}"/bin/spread-plus
-          "${{ github.workspace }}/bin/spread-plus" openstack-arm-ps7:tests/
+          "${{ github.workspace }}/bin/spread-plus" openstack-arm-ps7:tests/ | tee spread.log
 
     - name: Discard spread workers
       if: always()
@@ -271,7 +271,7 @@ jobs:
       run: |
           cd "${{ github.workspace }}"/smoke
           chmod +x "${{ github.workspace }}"/bin/spread-plus
-          "${{ github.workspace }}/bin/spread-plus" testflinger:tests/
+          "${{ github.workspace }}/bin/spread-plus" testflinger:tests/ | tee spread.log
   
     - name: Discard spread workers
       if: always()
