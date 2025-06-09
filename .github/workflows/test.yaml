@@ -91,10 +91,11 @@ jobs:
     - name: Smoke tests with google backend
       env:
           SPREAD_GOOGLE_KEY: ${{ secrets.SPREAD_GOOGLE_KEY }}
+          SPREAD_PARAMS: ${{ vars.SPREAD_PARAMS }}
       run: |
           cd "${{ github.workspace }}"/smoke
           chmod +x "${{ github.workspace }}"/bin/spread-plus
-          "${{ github.workspace }}/bin/spread-plus" google:tests/ | tee spread.log
+          "${{ github.workspace }}/bin/spread-plus" "$SPREAD_PARAMS" google:tests/ | tee spread.log
 
     - name: Discard spread workers
       if: always()
@@ -137,6 +138,7 @@ jobs:
           OS_USER_DOMAIN_NAME: ${{ vars.OS_USER_DOMAIN_NAME }}
           OS_USERNAME: ${{ secrets.OS_USERNAME }}
           OS_SKIP: ${{ vars.SKIP_OPENSTACK }}
+          SPREAD_PARAMS: ${{ vars.SPREAD_PARAMS }}
       run: |
           if [ "$OS_SKIP" == true ]; then
               echo "Skipping openstack smoke tests..."
@@ -144,7 +146,7 @@ jobs:
           fi
           cd "${{ github.workspace }}"/smoke
           chmod +x "${{ github.workspace }}"/bin/spread-plus
-          "${{ github.workspace }}/bin/spread-plus" openstack:tests/ | tee spread.log
+          "${{ github.workspace }}/bin/spread-plus" "$SPREAD_PARAMS" openstack:tests/ | tee spread.log
 
     - name: Discard spread workers
       if: always()
@@ -187,6 +189,7 @@ jobs:
           OS_USER_DOMAIN_NAME: ${{ vars.OS_USER_DOMAIN_NAME }}
           OS_USERNAME: ${{ secrets.OS_USERNAME }}
           OS_SKIP: ${{ vars.SKIP_OPENSTACK }}
+          SPREAD_PARAMS: ${{ vars.SPREAD_PARAMS }}
       run: |
           if [ "$OS_SKIP" == true ]; then
               echo "Skipping openstack smoke tests..."
@@ -194,7 +197,15 @@ jobs:
           fi
           cd "${{ github.workspace }}"/smoke
           chmod +x "${{ github.workspace }}"/bin/spread-plus
-          "${{ github.workspace }}/bin/spread-plus" openstack-ps7:tests/ | tee spread.log
+          "${{ github.workspace }}/bin/spread-plus" "$SPREAD_PARAMS" openstack-ps7:tests/ | tee spread.log
+
+    - name: Discard spread workers
+      if: always()
+      run: |
+          shopt -s nullglob;
+          for r in .spread-reuse.*.yaml; do
+            spread -discard -reuse-pid="$(echo "$r" | grep -o -E '[0-9]+')";
+          done
 
   smoke-tests-openstack-arm64:
     name: Smoke Tests in Openstack (arm64)
@@ -229,6 +240,7 @@ jobs:
           OS_USER_DOMAIN_NAME: ${{ vars.OS_USER_DOMAIN_NAME }}
           OS_USERNAME: ${{ secrets.OS_USERNAME }}
           OS_SKIP: ${{ vars.SKIP_OPENSTACK }}
+          SPREAD_PARAMS: ${{ vars.SPREAD_PARAMS }}
       run: |
           if [ "$OS_SKIP" == true ]; then
               echo "Skipping openstack smoke tests..."
@@ -236,7 +248,7 @@ jobs:
           fi
           cd "${{ github.workspace }}"/smoke
           chmod +x "${{ github.workspace }}"/bin/spread-plus
-          "${{ github.workspace }}/bin/spread-plus" openstack-arm-ps7:tests/ | tee spread.log
+          "${{ github.workspace }}/bin/spread-plus" "$SPREAD_PARAMS" openstack-arm-ps7:tests/ | tee spread.log
 
     - name: Discard spread workers
       if: always()
@@ -268,10 +280,12 @@ jobs:
         path: "${{ github.workspace }}/bin"
 
     - name: Smoke tests with testflinger backend
+      env: 
+          SPREAD_PARAMS: ${{ vars.SPREAD_PARAMS }}
       run: |
           cd "${{ github.workspace }}"/smoke
           chmod +x "${{ github.workspace }}"/bin/spread-plus
-          "${{ github.workspace }}/bin/spread-plus" testflinger:tests/ | tee spread.log
+          "${{ github.workspace }}/bin/spread-plus" "$SPREAD_PARAMS" testflinger:tests/ | tee spread.log
   
     - name: Discard spread workers
       if: always()
