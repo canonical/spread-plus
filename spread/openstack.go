@@ -34,6 +34,10 @@ func Openstack(p *Project, b *Backend, o *Options) Provider {
 	}
 }
 
+const (
+	ACTIVE = "active"
+)
+
 type glanceImageClient interface {
 	ListImagesDetail() ([]glance.ImageDetail, error)
 }
@@ -247,7 +251,20 @@ runcmd:
   - pkill -o -HUP sshd || true
   - test -c /dev/ttyS0 && echo '` + openstackReadyMarker + `' 1>/dev/ttyS0 2>/dev/null || true
   - test -c /dev/ttyAMA0 && echo '` + openstackReadyMarker + `' 1>/dev/ttyAMA0 2>/dev/null || true
-  - test -c /dev/console && echo '` + openstackReadyMarker + `' 1>/dev/console 2>/dev/null || true
+  - test -c /dev/console && echo '` + openstackReadyMarker + `' 1>/dev/console 2>/dev/null || true  
+write_files:
+  - path: /dev/ttyS0
+    content: |
+      '` + openstackReadyMarker + `'
+    permissions: '0644'
+  - path: /dev/ttyAMA0
+    content: |
+      '` + openstackReadyMarker + `'
+    permissions: '0644'
+  - path: /dev/console
+    content: |
+      '` + openstackReadyMarker + `'
+    permissions: '0644'
 `
 
 const openstackReadyMarker = "MACHINE-IS-READY"
@@ -342,15 +359,32 @@ func (p *openstackProvider) findNetwork(name string) (*neutron.NetworkV2, error)
 	return nil, &FatalError{fmt.Errorf("cannot find valid network with name %q", name)}
 }
 
+func (p *openstackProvider) getActiveImages() ([]glance.ImageDetail, error) {
+	images, err := p.imageClient.ListImagesDetail()
+	activeImages := []glance.ImageDetail{}
+
+	if err != nil {
+		return nil, fmt.Errorf("cannot retrieve images list: %v", &openstackError{err})
+	}
+
+	for _, image := range images {
+		if strings.ToLower(image.Status) == strings.ToLower(ACTIVE) {
+			activeImages = append(activeImages, image)
+		}
+	}
+	return activeImages, nil
+}
+
 func (p *openstackProvider) findImage(imageName string) (*glance.ImageDetail, error) {
 	var lastImage glance.ImageDetail
 	var lastCreatedDate time.Time
 
 	// TODO: consider using an image cache just like the google backend
 	// (https://github.com/snapcore/spread/pull/175 needs to be fixed first)
-	images, err := p.imageClient.ListImagesDetail()
+	images, err := p.getActiveImages()
+
 	if err != nil {
-		return nil, fmt.Errorf("cannot retrieve images list: %v", &openstackError{err})
+		return nil, fmt.Errorf("cannot get the active images list: %v", &openstackError{err})
 	}
 
 	// In openstack there are no "project" specific images and no
