@@ -31,9 +31,20 @@ backends:
             no_proxy: '127.0.0.1,ubuntu.com'
             NO_PROXY: '127.0.0.1,ubuntu.com'
         systems:
-            - ubuntu-24.04-64:
-                image: snapd-spread/ubuntu-24.04-64
-                workers: 1
+            - fedora-41-64:
+                  image: snapd-spread/fedora-41-64
+            - fedora-42-64:
+                  image: snapd-spread/fedora-42-64
+            - opensuse-15.6-64:
+                  image: snapd-spread/opensuse-15.6-64
+            - opensuse-tumbleweed-64:
+                  image: snapd-spread/opensuse-tumbleweed-64
+            - centos-9-64:
+                  image: snapd-spread/centos-9-64
+            - debian-12-64:
+                  image: snapd-spread/debian-12-64
+            - debian-sid-64:
+                  image: snapd-spread/debian-sid-64
 
     openstack-ps7:
         type: openstack
@@ -50,9 +61,24 @@ backends:
             http_proxy: 'http://egress.ps7.internal:3128'
             https_proxy: 'http://egress.ps7.internal:3128'
         systems:
+            - ubuntu-16.04-64:
+                image: snapd-spread/ubuntu-16.04-64
+            - ubuntu-18.04-64:
+                image: snapd-spread/ubuntu-18.04-64
+            - ubuntu-20.04-64:
+                image: snapd-spread/ubuntu-20.04-64
+            - ubuntu-20.04-64-uefi:
+                image: snapd-spread/ubuntu-20.04-64-uefi
             - ubuntu-22.04-64:
-                image: auto-sync/ubuntu-jammy-22.04-amd64-server
-                workers: 1
+                image: snapd-spread/ubuntu-22.04-64
+            - ubuntu-22.04-64-uefi:
+                image: snapd-spread/ubuntu-22.04-64-uefi
+            - ubuntu-24.04-64:
+                image: snapd-spread/ubuntu-24.04-64
+            - ubuntu-24.04-64-uefi:
+                image: snapd-spread/ubuntu-24.04-64-uefi
+            - ubuntu-25.04-64:
+                image: snapd-spread/ubuntu-25.04-64
 
     openstack-arm-ps7:
         type: openstack
@@ -69,9 +95,16 @@ backends:
             http_proxy: 'http://egress.ps7.internal:3128'
             https_proxy: 'http://egress.ps7.internal:3128'
         systems:
+            - ubuntu-20.04-arm-64:
+                image: snapd-spread/ubuntu-20.04-arm-64
             - ubuntu-22.04-arm-64:
-                image: auto-sync/ubuntu-jammy-22.04-arm64-server
-                workers: 1
+                image: snapd-spread/ubuntu-22.04-arm-64
+            - ubuntu-22.04-arm-64-uefi:
+                image: snapd-spread/ubuntu-22.04-arm-64-uefi
+            - ubuntu-24.04-arm-64:
+                image: snapd-spread/ubuntu-24.04-arm-64
+            - ubuntu-24.04-arm-64-uefi:
+                image: snapd-spread/ubuntu-24.04-arm-64-uefi
 
     testflinger:
         wait-timeout: 30m
