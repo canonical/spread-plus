@@ -251,20 +251,7 @@ runcmd:
   - pkill -o -HUP sshd || true
   - test -c /dev/ttyS0 && echo '` + openstackReadyMarker + `' 1>/dev/ttyS0 2>/dev/null || true
   - test -c /dev/ttyAMA0 && echo '` + openstackReadyMarker + `' 1>/dev/ttyAMA0 2>/dev/null || true
-  - test -c /dev/console && echo '` + openstackReadyMarker + `' 1>/dev/console 2>/dev/null || true  
-write_files:
-  - path: /dev/ttyS0
-    content: |
-      '` + openstackReadyMarker + `'
-    permissions: '0644'
-  - path: /dev/ttyAMA0
-    content: |
-      '` + openstackReadyMarker + `'
-    permissions: '0644'
-  - path: /dev/console
-    content: |
-      '` + openstackReadyMarker + `'
-    permissions: '0644'
+  - test -c /dev/console && echo '` + openstackReadyMarker + `' 1>/dev/console 2>/dev/null || true
 `
 
 const openstackReadyMarker = "MACHINE-IS-READY"
