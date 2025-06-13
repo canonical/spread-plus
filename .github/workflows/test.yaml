@@ -11,7 +11,9 @@ on:
 jobs:
   build:
     name: Build Spread
-    runs-on: ubuntu-latest
+    runs-on:
+      - '["ubuntu-22.04"]'
+      - '["ubuntu-22.04-arm"]'
 
     steps:
     - name: Checkout code
@@ -30,7 +32,7 @@ jobs:
     - name: Upload spread binary to cache
       uses: actions/upload-artifact@v4
       with:
-        name: "spread-plus-${{ github.run_id }}"
+        name: "spread-plus-${{ github.run_id }}-${{ runner.arch }}"
         path: "spread-plus"
 
   integration-tests:
@@ -50,7 +52,7 @@ jobs:
     - name: Download spread-plus
       uses: actions/download-artifact@v4
       with:
-        name: "spread-plus-${{ github.run_id }}"
+        name: "spread-plus-${{ github.run_id }}-${{ runner.arch }}"
         path: "${{ github.workspace }}/bin"
 
     - name: Integration tests
@@ -85,7 +87,7 @@ jobs:
     - name: Download spread-plus
       uses: actions/download-artifact@v4
       with:
-        name: "spread-plus-${{ github.run_id }}"
+        name: "spread-plus-${{ github.run_id }}-${{ runner.arch }}"
         path: "${{ github.workspace }}/bin"
 
     - name: Smoke tests with google backend
@@ -123,7 +125,7 @@ jobs:
     - name: Download spread-plus
       uses: actions/download-artifact@v4
       with:
-        name: "spread-plus-${{ github.run_id }}"
+        name: "spread-plus-${{ github.run_id }}-${{ runner.arch }}"
         path: "${{ github.workspace }}/bin"
 
     - name: Smoke tests with openstack backend
@@ -174,7 +176,7 @@ jobs:
     - name: Download spread-plus
       uses: actions/download-artifact@v4
       with:
-        name: "spread-plus-${{ github.run_id }}"
+        name: "spread-plus-${{ github.run_id }}-${{ runner.arch }}"
         path: "${{ github.workspace }}/bin"
 
     - name: Smoke tests with openstack backend
@@ -225,7 +227,7 @@ jobs:
     - name: Download spread-plus
       uses: actions/download-artifact@v4
       with:
-        name: "spread-plus-${{ github.run_id }}"
+        name: "spread-plus-${{ github.run_id }}-${{ runner.arch }}"
         path: "${{ github.workspace }}/bin"
 
     - name: Smoke tests with openstack backend
@@ -276,7 +278,7 @@ jobs:
     - name: Download spread-plus
       uses: actions/download-artifact@v4
       with:
-        name: "spread-plus-${{ github.run_id }}"
+        name: "spread-plus-${{ github.run_id }}-${{ runner.arch }}"
         path: "${{ github.workspace }}/bin"
 
     - name: Smoke tests with testflinger backend
@@ -297,26 +299,34 @@ jobs:
 
   upload:
     name: Upload binary to GCE
-    runs-on: ubuntu-latest
+    runs-on:
+      - '["ubuntu-22.04"]'
+      - '["ubuntu-22.04-arm"]'
     needs: [integration-tests, smoke-tests-google, smoke-tests-openstack-amd64, smoke-tests-openstack-arm64]
 
     steps:
     - name: Download spread-plus
       uses: actions/download-artifact@v4
       with:
-        name: "spread-plus-${{ github.run_id }}"
+        name: "spread-plus-${{ github.run_id }}-${{ runner.arch }}"
         path: "${{ github.workspace }}/bin"
 
     - name: Upload to google bucket
       if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       env:
           GCLOUD_SA_KEY: ${{ secrets.GCLOUD_SA_KEY }}
-          SPREAD_FILE: spread-plus-amd64
+          SPREAD_FILE: spread-plus
       run: |
           sudo snap install google-cloud-sdk --classic
           echo "$GCLOUD_SA_KEY" > sa.json
           gcloud auth activate-service-account --key-file=sa.json
           rm -f sa.json
+
+          SUFFIX=amd64
+          if [ ${{ runner.arch }} == ARM64 ]; then
+            SUFFIX=arm64
+          fi
+          SPREAD_FILE="${SPREAD_FILE}-${SUFFIX}"
 
           mv "${{ github.workspace }}"/bin/spread-plus spread
           chmod +x spread
