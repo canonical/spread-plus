@@ -12,8 +12,8 @@ jobs:
   build:
     name: Build Spread
     runs-on:
-      - '["ubuntu-22.04"]'
-      - '["ubuntu-22.04-arm"]'
+      - ubuntu-latest
+      - ubuntu-latest-arm64
 
     steps:
     - name: Checkout code
@@ -300,8 +300,8 @@ jobs:
   upload:
     name: Upload binary to GCE
     runs-on:
-      - '["ubuntu-22.04"]'
-      - '["ubuntu-22.04-arm"]'
+      - ubuntu-latest
+      - ubuntu-latest-arm64
     needs: [integration-tests, smoke-tests-google, smoke-tests-openstack-amd64, smoke-tests-openstack-arm64]
 
     steps:
