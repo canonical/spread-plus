@@ -390,9 +390,9 @@ func (p *openstackProvider) findImage(imageName string) (*glance.ImageDetail, er
 			return &image, nil
 		}
 
-		// Otherwise use term matching.
+		// Otherwise use term matching and prefix.
 		imageTerms := toTerms(image.Name)
-		if containsTerms(imageTerms, searchTerms) {
+		if containsTerms(imageTerms, searchTerms) || strings.HasPrefix(image.Name, imageName) {
 			debugf("Terms match: %#v matches %#v", imageName, image)
 			// Check if the creation date for the current image is after the previous selected one
 			currCreatedDate, err := time.Parse(time.RFC3339, image.Created)
