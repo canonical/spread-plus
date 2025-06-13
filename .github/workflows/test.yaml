@@ -9,9 +9,13 @@ on:
     - main
 
 jobs:
-  build-amd64:
-    name: Build Spread amd64
-    runs-on: ubuntu-24.04
+  build:
+    name: Build Spread
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
 
     steps:
     - name: Checkout code
@@ -25,41 +29,17 @@ jobs:
 
     - name: Build spread
       run: |
-          go build -o spread-plus cmd/spread/main.go
+          GOARCH="${{ matrix.arch }}" go build -o spread-plus cmd/spread/main.go
 
     - name: Upload spread binary to cache
       uses: actions/upload-artifact@v4
       with:
-        name: "spread-plus-${{ github.run_id }}-${{ runner.arch }}"
-        path: "spread-plus"
-
-  build-arm64:
-    name: Build Spread arm64
-    runs-on: ubuntu-24.04-arm
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Install dependencies
-      env:
-          GOCHANNEL: 1.24/stable
-      run: |
-          sudo snap install go --classic --channel "$GOCHANNEL"
-
-    - name: Build spread
-      run: |
-          go build -o spread-plus cmd/spread/main.go
-
-    - name: Upload spread binary to cache
-      uses: actions/upload-artifact@v4
-      with:
-        name: "spread-plus-${{ github.run_id }}-${{ runner.arch }}"
+        name: "spread-plus-${{ github.run_id }}-${{ matrix.arch }}"
         path: "spread-plus"
 
   integration-tests:
     name: Integration Tests
-    needs: [build-amd64]
+    needs: [build]
     runs-on: [self-hosted, spread-enabled]
 
     steps:
@@ -74,7 +54,7 @@ jobs:
     - name: Download spread-plus
       uses: actions/download-artifact@v4
       with:
-        name: "spread-plus-${{ github.run_id }}-${{ runner.arch }}"
+        name: "spread-plus-${{ github.run_id }}-amd64"
         path: "${{ github.workspace }}/bin"
 
     - name: Integration tests
@@ -94,7 +74,7 @@ jobs:
 
   smoke-tests-google:
     name: Smoke Tests in Google
-    needs: [build-amd64]
+    needs: [build]
     runs-on: [self-hosted, spread-enabled]
 
     steps:
@@ -109,7 +89,7 @@ jobs:
     - name: Download spread-plus
       uses: actions/download-artifact@v4
       with:
-        name: "spread-plus-${{ github.run_id }}-${{ runner.arch }}"
+        name: "spread-plus-${{ github.run_id }}-amd64"
         path: "${{ github.workspace }}/bin"
 
     - name: Smoke tests with google backend
@@ -131,7 +111,7 @@ jobs:
 
   smoke-tests-openstack-amd64:
     name: Smoke Tests in Openstack (amd64)
-    needs: [build-amd64]
+    needs: [build]
     runs-on: [self-hosted, spread-enabled]
     environment: OS_AMD64_PS6
 
@@ -147,7 +127,7 @@ jobs:
     - name: Download spread-plus
       uses: actions/download-artifact@v4
       with:
-        name: "spread-plus-${{ github.run_id }}-${{ runner.arch }}"
+        name: "spread-plus-${{ github.run_id }}-amd64"
         path: "${{ github.workspace }}/bin"
 
     - name: Smoke tests with openstack backend
@@ -182,7 +162,7 @@ jobs:
 
   smoke-tests-openstack-ps7-amd64:
     name: Smoke Tests in Openstack PS7 (amd64)
-    needs: [build-amd64]
+    needs: [build]
     runs-on: [self-hosted, spread-enabled]
     environment: OS_AMD64_PS7
 
@@ -198,7 +178,7 @@ jobs:
     - name: Download spread-plus
       uses: actions/download-artifact@v4
       with:
-        name: "spread-plus-${{ github.run_id }}-${{ runner.arch }}"
+        name: "spread-plus-${{ github.run_id }}-amd64"
         path: "${{ github.workspace }}/bin"
 
     - name: Smoke tests with openstack backend
@@ -233,7 +213,7 @@ jobs:
 
   smoke-tests-openstack-arm64:
     name: Smoke Tests in Openstack (arm64)
-    needs: [build-amd64]
+    needs: [build]
     runs-on: [self-hosted, spread-enabled]
     environment: OS_ARM64_PS7
 
@@ -249,7 +229,7 @@ jobs:
     - name: Download spread-plus
       uses: actions/download-artifact@v4
       with:
-        name: "spread-plus-${{ github.run_id }}-${{ runner.arch }}"
+        name: "spread-plus-${{ github.run_id }}-amd64"
         path: "${{ github.workspace }}/bin"
 
     - name: Smoke tests with openstack backend
@@ -284,7 +264,7 @@ jobs:
 
   smoke-tests-testflinger:
     name: Smoke Tests in Testflinger
-    needs: [build-amd64]
+    needs: [build]
     runs-on: [self-hosted, spread-enabled]
     if: ${{ vars.SKIP_TESTFLINGER == 'false' }}
 
@@ -300,7 +280,7 @@ jobs:
     - name: Download spread-plus
       uses: actions/download-artifact@v4
       with:
-        name: "spread-plus-${{ github.run_id }}-${{ runner.arch }}"
+        name: "spread-plus-${{ github.run_id }}-amd64"
         path: "${{ github.workspace }}/bin"
 
     - name: Smoke tests with testflinger backend
@@ -321,11 +301,11 @@ jobs:
 
   upload:
     name: Upload binary to GCE
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
     needs: [integration-tests, smoke-tests-google, smoke-tests-openstack-amd64, smoke-tests-openstack-arm64]
     strategy:
       matrix:
-        arch: [X64, ARM64]
+        arch: [amd64, arm64]
 
     steps:
     - name: Download spread-plus
@@ -338,18 +318,12 @@ jobs:
       if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       env:
           GCLOUD_SA_KEY: ${{ secrets.GCLOUD_SA_KEY }}
-          SPREAD_FILE: spread-plus
+          SPREAD_FILE: spread-plus-${{ matrix.arch }}
       run: |
           sudo snap install google-cloud-sdk --classic
           echo "$GCLOUD_SA_KEY" > sa.json
           gcloud auth activate-service-account --key-file=sa.json
           rm -f sa.json
-
-          SUFFIX=amd64
-          if [ ${{ matrix.arch }} == ARM64 ]; then
-            SUFFIX=arm64
-          fi
-          SPREAD_FILE="${SPREAD_FILE}-${SUFFIX}"
 
           mv "${{ github.workspace }}"/bin/spread-plus spread
           chmod +x spread
