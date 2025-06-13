@@ -12,8 +12,8 @@ jobs:
   build:
     name: Build Spread
     runs-on:
-      - ubuntu-latest
-      - ubuntu-latest-arm64
+      - ubuntu-24.04
+      - ubuntu-24.04-arm
 
     steps:
     - name: Checkout code
@@ -300,8 +300,8 @@ jobs:
   upload:
     name: Upload binary to GCE
     runs-on:
-      - ubuntu-latest
-      - ubuntu-latest-arm64
+      - ubuntu-24.04
+      - ubuntu-24.04-arm
     needs: [integration-tests, smoke-tests-google, smoke-tests-openstack-amd64, smoke-tests-openstack-arm64]
 
     steps:
