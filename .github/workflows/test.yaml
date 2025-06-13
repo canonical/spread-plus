@@ -9,11 +9,33 @@ on:
     - main
 
 jobs:
-  build:
-    name: Build Spread
-    runs-on:
-      - ubuntu-24.04
-      - ubuntu-24.04-arm
+  build-amd64:
+    name: Build Spread amd64
+    runs-on: ubuntu-24.04
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install dependencies
+      env:
+          GOCHANNEL: 1.24/stable
+      run: |
+          sudo snap install go --classic --channel "$GOCHANNEL"
+
+    - name: Build spread
+      run: |
+          go build -o spread-plus cmd/spread/main.go
+
+    - name: Upload spread binary to cache
+      uses: actions/upload-artifact@v4
+      with:
+        name: "spread-plus-${{ github.run_id }}-${{ runner.arch }}"
+        path: "spread-plus"
+
+  build-arm64:
+    name: Build Spread arm64
+    runs-on: ubuntu-24.04-arm
 
     steps:
     - name: Checkout code
@@ -37,7 +59,7 @@ jobs:
 
   integration-tests:
     name: Integration Tests
-    needs: [build]
+    needs: [build-amd64]
     runs-on: [self-hosted, spread-enabled]
 
     steps:
@@ -72,7 +94,7 @@ jobs:
 
   smoke-tests-google:
     name: Smoke Tests in Google
-    needs: [build]
+    needs: [build-amd64]
     runs-on: [self-hosted, spread-enabled]
 
     steps:
@@ -109,7 +131,7 @@ jobs:
 
   smoke-tests-openstack-amd64:
     name: Smoke Tests in Openstack (amd64)
-    needs: [build]
+    needs: [build-amd64]
     runs-on: [self-hosted, spread-enabled]
     environment: OS_AMD64_PS6
 
@@ -160,7 +182,7 @@ jobs:
 
   smoke-tests-openstack-ps7-amd64:
     name: Smoke Tests in Openstack PS7 (amd64)
-    needs: [build]
+    needs: [build-amd64]
     runs-on: [self-hosted, spread-enabled]
     environment: OS_AMD64_PS7
 
@@ -211,7 +233,7 @@ jobs:
 
   smoke-tests-openstack-arm64:
     name: Smoke Tests in Openstack (arm64)
-    needs: [build]
+    needs: [build-amd64]
     runs-on: [self-hosted, spread-enabled]
     environment: OS_ARM64_PS7
 
@@ -262,7 +284,7 @@ jobs:
 
   smoke-tests-testflinger:
     name: Smoke Tests in Testflinger
-    needs: [build]
+    needs: [build-amd64]
     runs-on: [self-hosted, spread-enabled]
     if: ${{ vars.SKIP_TESTFLINGER == 'false' }}
 
@@ -299,16 +321,17 @@ jobs:
 
   upload:
     name: Upload binary to GCE
-    runs-on:
-      - ubuntu-24.04
-      - ubuntu-24.04-arm
+    runs-on: ubuntu-24.04
     needs: [integration-tests, smoke-tests-google, smoke-tests-openstack-amd64, smoke-tests-openstack-arm64]
+    strategy:
+      matrix:
+        arch: [X64, ARM64]
 
     steps:
     - name: Download spread-plus
       uses: actions/download-artifact@v4
       with:
-        name: "spread-plus-${{ github.run_id }}-${{ runner.arch }}"
+        name: "spread-plus-${{ github.run_id }}-${{ matrix.arch }}"
         path: "${{ github.workspace }}/bin"
 
     - name: Upload to google bucket
@@ -323,7 +346,7 @@ jobs:
           rm -f sa.json
 
           SUFFIX=amd64
-          if [ ${{ runner.arch }} == ARM64 ]; then
+          if [ ${{ matrix.arch }} == ARM64 ]; then
             SUFFIX=arm64
           fi
           SPREAD_FILE="${SPREAD_FILE}-${SUFFIX}"
