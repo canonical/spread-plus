@@ -42,8 +42,12 @@ type TestFlingerJob struct {
 type TestFlingerJobData struct {
 	Name      string
 	JobId     string    `json:"job_id"`
-	CreatedAt time.Time `json:"created_at"`
+	CreatedAt CreatedAt `json:"created_at"`
 	JobState  string    `json:"job_state"`
+}
+
+type CreatedAt struct {
+	Date time.Time `json:"$date"`
 }
 
 type TestFlingerRequestData struct {
@@ -191,7 +195,7 @@ func (p *TestFlingerProvider) GarbageCollect() error {
 			continue
 		}
 
-		runningTime := now.Sub(s.d.CreatedAt)
+		runningTime := now.Sub(s.d.CreatedAt.Date)
 		if runningTime > jobTimeout {
 			printf("Job %s exceeds halt-timeout. Shutting it down...", s.d.JobId)
 			err := s.Discard(context.Background())

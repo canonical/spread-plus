@@ -118,14 +118,6 @@ backends:
                   workers: 1
                   username: ubuntu
                   password: ubuntu
-            - ubuntu-core-20-murcia:
-                queue: murcia-3200
-                image: core20-latest-stable
-                workers: 1
-                username: ubuntu
-                reserve-key: lp:sergio-j-cazzolato
-                ssh-rsa-key: '$(HOST: echo "$SPREAD_SSH_KEY")'
-                ssh-key-pass: '$(HOST: echo "$SPREAD_SSH_KEY_PASS")'
 
 exclude:
     - .spread-reuse.yaml
