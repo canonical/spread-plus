@@ -92,12 +92,13 @@ type openstackServer struct {
 }
 
 type openstackServerData struct {
-	Id       string
-	Name     string
-	Flavor   string    `json:"machineType"`
-	Networks []string  `json:"network"`
-	Status   string    `yaml:"-"`
-	Created  time.Time `json:"creationTimestamp"`
+	Id                  string
+	Name                string
+	Flavor              string    `json:"machineType"`
+	Networks            []string  `json:"network"`
+	Status              string    `yaml:"-"`
+	Created             time.Time `json:"creationTimestamp"`
+	DeleteOnTermination bool
 
 	Labels map[string]string `yaml:"-"`
 }
@@ -725,12 +726,18 @@ func (p *openstackProvider) createMachine(ctx context.Context, system *System) (
 		storage = 20
 	}
 
+	deleteOnTermination := false
+	if p.backend.VolumeAutoDelete {
+		deleteOnTermination = true
+	}
+
 	opts.BlockDeviceMappings = []nova.BlockDeviceMapping{{
-		BootIndex:       0,
-		SourceType:      "image",
-		DestinationType: "volume",
-		VolumeSize:      storage,
-		UUID:            image.Id,
+		BootIndex:           0,
+		SourceType:          "image",
+		DestinationType:     "volume",
+		VolumeSize:          storage,
+		UUID:                image.Id,
+		DeleteOnTermination: deleteOnTermination,
 	}}
 
 	if len(system.Groups) > 0 {
@@ -749,12 +756,13 @@ func (p *openstackProvider) createMachine(ctx context.Context, system *System) (
 	s := &openstackServer{
 		p: p,
 		d: openstackServerData{
-			Id:       server.Id,
-			Name:     name,
-			Flavor:   flavor.Name,
-			Networks: system.Networks,
-			Status:   serverStatusProvisioning,
-			Created:  time.Now(),
+			Id:                  server.Id,
+			Name:                name,
+			Flavor:              flavor.Name,
+			Networks:            system.Networks,
+			Status:              serverStatusProvisioning,
+			Created:             time.Now(),
+			DeleteOnTermination: deleteOnTermination,
 		},
 
 		system: system,
@@ -879,10 +887,13 @@ func (p *openstackProvider) removeMachine(ctx context.Context, s *openstackServe
 		return err
 	}
 
-	for _, volumeAttachment := range volumeAttachments {
-		err = p.removeVolume(ctx, s, volumeAttachment.VolumeId)
-		if err != nil {
-			return err
+	// Remove manually the volumes when DeleteOnTermination is false
+	if !s.d.DeleteOnTermination {
+		for _, volumeAttachment := range volumeAttachments {
+			err = p.removeVolume(ctx, s, volumeAttachment.VolumeId)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	return nil

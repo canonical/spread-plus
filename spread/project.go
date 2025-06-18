@@ -70,7 +70,8 @@ type Backend struct {
 	// TODO: Remove once it is possible to ssh to PS7/PS8
 	Proxy string
 	// the expected format is a list of CIDR:port
-	CIDRPortRel []string `yaml:"cidr-port-rel"`
+	CIDRPortRel      []string `yaml:"cidr-port-rel"`
+	VolumeAutoDelete bool     `yaml:"volume-auto-delete"`
 
 	// Only for OpenStack so far
 	Networks []string

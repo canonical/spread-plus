@@ -55,6 +55,7 @@ backends:
         groups: [default]
         proxy: ingress-haproxy.ps7.canonical.com
         cidr-port-rel: [10.151.54.0/24:4000]
+        volume-auto-delete: true
         environment:
             HTTP_PROXY: 'http://egress.ps7.internal:3128'
             HTTPS_PROXY: 'http://egress.ps7.internal:3128'
@@ -89,6 +90,7 @@ backends:
         groups: [default]
         proxy: ingress-haproxy.ps7.canonical.com
         cidr-port-rel: [10.151.53.0/24:3000]
+        volume-auto-delete: true
         environment:
             HTTP_PROXY: 'http://egress.ps7.internal:3128'
             HTTPS_PROXY: 'http://egress.ps7.internal:3128'
