@@ -535,7 +535,7 @@ func (p *openstackProvider) waitProvision(ctx context.Context, s *openstackServe
 	}
 }
 
-var openstackServerBootTimeout = 2 * time.Minute
+var openstackServerBootTimeout = 5 * time.Minute
 var openstackServerBootRetry = 5 * time.Second
 
 func (p *openstackProvider) updateAddressIfProxyDefined(ctx context.Context, s *openstackServer) error {

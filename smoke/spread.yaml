@@ -61,6 +61,8 @@ backends:
             HTTPS_PROXY: 'http://egress.ps7.internal:3128'
             http_proxy: 'http://egress.ps7.internal:3128'
             https_proxy: 'http://egress.ps7.internal:3128'
+            no_proxy: '127.0.0.1,localhost'
+            NO_PROXY: '127.0.0.1,localhost'
         systems:
             - ubuntu-16.04-64:
                 image: snapd-spread/ubuntu-16.04-64
@@ -81,6 +83,34 @@ backends:
             - ubuntu-25.04-64:
                 image: snapd-spread/ubuntu-25.04-64
 
+            - arch-linux-64:
+                image: snapd-spread/arch-linux-64
+
+    openstack-ext-ps7:
+        type: openstack
+        key: '$(HOST: echo "$OS_CREDENTIALS_AMD64_PS7")'
+        plan: shared.medium
+        halt-timeout: 2h
+        wait-timeout: 5m
+        groups: [default]
+        proxy: ingress-haproxy.ps7.canonical.com
+        cidr-port-rel: [10.151.54.0/24:4000]
+        volume-auto-delete: true
+        environment:
+            HTTP_PROXY: 'http://egress.ps7.internal:3128'
+            HTTPS_PROXY: 'http://egress.ps7.internal:3128'
+            http_proxy: 'http://egress.ps7.internal:3128'
+            https_proxy: 'http://egress.ps7.internal:3128'
+            no_proxy: '127.0.0.1,localhost'
+            NO_PROXY: '127.0.0.1,localhost'
+        systems:
+            - amazon-linux-2-64:
+                image: snapd-spread/amazon-linux-2-64
+                storage: 50G
+            - amazon-linux-2023-64:
+                image: snapd-spread/amazon-linux-2023-64
+                storage: 50G
+
     openstack-arm-ps7:
         type: openstack
         key: '$(HOST: echo "$OS_CREDENTIALS_ARM64_PS7")'
@@ -96,6 +126,8 @@ backends:
             HTTPS_PROXY: 'http://egress.ps7.internal:3128'
             http_proxy: 'http://egress.ps7.internal:3128'
             https_proxy: 'http://egress.ps7.internal:3128'
+            no_proxy: '127.0.0.1,localhost'
+            NO_PROXY: '127.0.0.1,localhost'
         systems:
             - ubuntu-20.04-arm-64:
                 image: snapd-spread/ubuntu-20.04-arm-64

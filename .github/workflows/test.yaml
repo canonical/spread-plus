@@ -201,7 +201,7 @@ jobs:
           fi
           cd "${{ github.workspace }}"/smoke
           chmod +x "${{ github.workspace }}"/bin/spread-plus
-          "${{ github.workspace }}/bin/spread-plus" "$SPREAD_PARAMS" openstack-ps7:tests/ | tee spread.log
+          "${{ github.workspace }}/bin/spread-plus" "$SPREAD_PARAMS" openstack-ps7:tests/ openstack-ext-ps7:tests/ | tee spread.log
 
     - name: Discard spread workers
       if: always()
