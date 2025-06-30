@@ -877,10 +877,12 @@ var openstackRemoveVolumeTimeout = 2 * time.Minute
 var openstackRemoveRetry = 5 * time.Second
 
 func (p *openstackProvider) removeMachine(ctx context.Context, s *openstackServer) error {
-	volumeAttachments, err := p.computeClient.ListVolumeAttachments(s.d.Id)
-	if err != nil {
-		return fmt.Errorf("failed to retrieve the volumes attached to the instance: %v", err)
-	}
+	if !s.d.DeleteOnTermination {
+		volumeAttachments, err := p.computeClient.ListVolumeAttachments(s.d.Id)
+		if err != nil {
+			return fmt.Errorf("failed to retrieve the volumes attached to the instance: %v", err)
+		}
+	fi
 
 	err = p.removeServer(ctx, s)
 	if err != nil {
