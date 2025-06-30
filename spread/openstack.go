@@ -877,12 +877,19 @@ var openstackRemoveVolumeTimeout = 2 * time.Minute
 var openstackRemoveRetry = 5 * time.Second
 
 func (p *openstackProvider) removeMachine(ctx context.Context, s *openstackServer) error {
+	_, err := p.computeClient.GetServer(s.d.Id)
+	if err != nil {
+		// this is when the server was already removed
+		return nil
+	}
+
+	volumesToRemove := []nova.VolumeAttachment{}
 	if !s.d.DeleteOnTermination {
-		volumeAttachments, err := p.computeClient.ListVolumeAttachments(s.d.Id)
+		volumesToRemove, err = p.computeClient.ListVolumeAttachments(s.d.Id)
 		if err != nil {
 			return fmt.Errorf("failed to retrieve the volumes attached to the instance: %v", err)
 		}
-	fi
+	}
 
 	err = p.removeServer(ctx, s)
 	if err != nil {
@@ -890,14 +897,13 @@ func (p *openstackProvider) removeMachine(ctx context.Context, s *openstackServe
 	}
 
 	// Remove manually the volumes when DeleteOnTermination is false
-	if !s.d.DeleteOnTermination {
-		for _, volumeAttachment := range volumeAttachments {
-			err = p.removeVolume(ctx, s, volumeAttachment.VolumeId)
-			if err != nil {
-				return err
-			}
+	for _, volumeAttachment := range volumesToRemove {
+		err = p.removeVolume(ctx, s, volumeAttachment.VolumeId)
+		if err != nil {
+			return err
 		}
 	}
+
 	return nil
 }
 
