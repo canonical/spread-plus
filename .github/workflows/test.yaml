@@ -62,7 +62,11 @@ jobs:
           SPREAD_GOOGLE_KEY: ${{ secrets.SPREAD_GOOGLE_KEY }}
       run: |      
           chmod +x "${{ github.workspace }}"/bin/spread-plus
-          "${{ github.workspace }}/bin/spread-plus" google:tests/ | tee spread.log
+          # "pipefail" ensures that a non-zero status from the spread is propagated
+          (
+            set -o pipefail
+            "${{ github.workspace }}/bin/spread-plus" google:tests/ | tee spread.log
+          )
 
     - name: Discard spread workers
       if: always()
@@ -99,7 +103,11 @@ jobs:
       run: |
           cd "${{ github.workspace }}"/smoke
           chmod +x "${{ github.workspace }}"/bin/spread-plus
-          "${{ github.workspace }}/bin/spread-plus" "$SPREAD_PARAMS" google:tests/ | tee spread.log
+          # "pipefail" ensures that a non-zero status from the spread is propagated
+          (
+            set -o pipefail
+            "${{ github.workspace }}/bin/spread-plus" "$SPREAD_PARAMS" google:tests/ | tee spread.log
+          )
 
     - name: Discard spread workers
       if: always()
@@ -150,7 +158,11 @@ jobs:
           fi
           cd "${{ github.workspace }}"/smoke
           chmod +x "${{ github.workspace }}"/bin/spread-plus
-          "${{ github.workspace }}/bin/spread-plus" "$SPREAD_PARAMS" openstack:tests/ | tee spread.log
+          # "pipefail" ensures that a non-zero status from the spread is propagated
+          (
+            set -o pipefail
+            "${{ github.workspace }}/bin/spread-plus" "$SPREAD_PARAMS" openstack:tests/ | tee spread.log
+          )
 
     - name: Discard spread workers
       if: always()
@@ -201,7 +213,11 @@ jobs:
           fi
           cd "${{ github.workspace }}"/smoke
           chmod +x "${{ github.workspace }}"/bin/spread-plus
-          "${{ github.workspace }}/bin/spread-plus" "$SPREAD_PARAMS" openstack-ps7:tests/ openstack-ext-ps7:tests/ | tee spread.log
+          # "pipefail" ensures that a non-zero status from the spread is propagated
+          (
+            set -o pipefail
+            "${{ github.workspace }}/bin/spread-plus" "$SPREAD_PARAMS" openstack-ps7:tests/ openstack-ext-ps7:tests/ | tee spread.log
+          )
 
     - name: Discard spread workers
       if: always()
@@ -252,7 +268,11 @@ jobs:
           fi
           cd "${{ github.workspace }}"/smoke
           chmod +x "${{ github.workspace }}"/bin/spread-plus
-          "${{ github.workspace }}/bin/spread-plus" "$SPREAD_PARAMS" openstack-arm-ps7:tests/ | tee spread.log
+          # "pipefail" ensures that a non-zero status from the spread is propagated
+          (
+            set -o pipefail    
+            "${{ github.workspace }}/bin/spread-plus" "$SPREAD_PARAMS" openstack-arm-ps7:tests/ | tee spread.log
+          )
 
     - name: Discard spread workers
       if: always()
@@ -289,7 +309,11 @@ jobs:
       run: |
           cd "${{ github.workspace }}"/smoke
           chmod +x "${{ github.workspace }}"/bin/spread-plus
-          "${{ github.workspace }}/bin/spread-plus" "$SPREAD_PARAMS" testflinger:tests/ | tee spread.log
+          # "pipefail" ensures that a non-zero status from the spread is propagated
+          (
+            set -o pipefail    
+            "${{ github.workspace }}/bin/spread-plus" "$SPREAD_PARAMS" testflinger:tests/ | tee spread.log
+          )
   
     - name: Discard spread workers
       if: always()
