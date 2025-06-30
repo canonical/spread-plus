@@ -696,17 +696,24 @@ func (p *googleProvider) removeMachine(ctx context.Context, s *googleServer) err
 	return err
 }
 
-func (p *googleProvider) GarbageCollect() error {
+func (p *googleProvider) GarbageCollect(collect int) error {
 	servers, err := p.list()
 	if err != nil {
 		return err
 	}
+
+	// remainingCollect will start with -1 when all the instances have to be collected
+	remainingCollect := collect
 
 	now := time.Now()
 	haltTimeout := p.backend.HaltTimeout.Duration
 
 	// Iterate over all the running instances
 	for _, s := range servers {
+		if remainingCollect == 0 {
+			break
+		}
+
 		serverTimeout := haltTimeout
 		if value, ok := s.d.Labels["halt-timeout"]; ok {
 			d, err := time.ParseDuration(strings.TrimSpace(value))
@@ -729,6 +736,8 @@ func (p *googleProvider) GarbageCollect() error {
 			err := p.removeMachine(context.Background(), s)
 			if err != nil {
 				printf("WARNING: Cannot garbage collect %s: %v", s, err)
+			} else {
+				remainingCollect = remainingCollect - 1
 			}
 		}
 	}

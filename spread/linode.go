@@ -868,7 +868,7 @@ func (p *linodeProvider) locationID(name string) (int, error) {
 	return 0, &FatalError{fmt.Errorf("cannot find Linode location %q", name)}
 }
 
-func (p *linodeProvider) GarbageCollect() error {
+func (p *linodeProvider) GarbageCollect(collect int) error {
 	params := linodeParams{
 		"api_action": "linode.list",
 	}
