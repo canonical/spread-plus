@@ -36,7 +36,7 @@ var (
 	seed           = flag.Int64("seed", 0, "Seed for job order permutation")
 	repeat         = flag.Int("repeat", 0, "Number of times to repeat each task")
 	garbageCollect = flag.Bool("gc", false, "Garbage collect backend resources when possible")
-	collect        = flag.Int("collect", -1, "Garbage collect up to a number of resources")
+	collect        = flag.Int("collect", -1, "Garbage collect up to a number of resources (just openstack)")
 	perf           = flag.Bool("perf", false, "Show tasks output with datetime")
 	workers        = flag.Int("workers", 0, "Number of workers to use on each system")
 	order          = flag.Bool("order", false, "Follow the tasks order passed as parameter")
