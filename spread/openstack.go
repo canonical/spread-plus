@@ -2,6 +2,7 @@ package spread
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"net"
@@ -538,6 +539,16 @@ func (p *openstackProvider) waitProvision(ctx context.Context, s *openstackServe
 var openstackServerBootTimeout = 5 * time.Minute
 var openstackServerBootRetry = 5 * time.Second
 
+func countIPsBetween(initialIp net.IP, finalIp net.IP) (uint32, error) {
+	ip1Int := binary.BigEndian.Uint32(initialIp.To4())
+	ip2Int := binary.BigEndian.Uint32(finalIp.To4())
+
+	if ip1Int > ip2Int {
+		return ip1Int - ip2Int, nil
+	}
+	return ip2Int - ip1Int, nil
+}
+
 func (p *openstackProvider) updateAddressIfProxyDefined(ctx context.Context, s *openstackServer) error {
 	if s.p.backend.Proxy != "" {
 		if len(s.p.backend.CIDRPortRel) == 0 {
@@ -559,14 +570,26 @@ func (p *openstackProvider) updateAddressIfProxyDefined(ctx context.Context, s *
 		}
 
 		ip := net.ParseIP(s.address)
-		lastIPPart := int(ip.To4()[3])
+		if ip == nil || ip.To4() == nil {
+			return fmt.Errorf("invalid IPv4 addresses")
+		}
+
 		_, cidrNet, err := net.ParseCIDR(cidr)
 		if err != nil {
 			return fmt.Errorf("Invalid CIDR format: %s", err)
 		}
 
 		if cidrNet.Contains(ip) {
-			finalPort := strconv.Itoa(initialPort + lastIPPart)
+			initialIp := net.ParseIP(strings.SplitN(cidr, "/", 2)[0])
+			if initialIp == nil || initialIp.To4() == nil {
+				return fmt.Errorf("invalid Initial IPv4 addresses from CIDR")
+			}
+
+			diffBetweenIps, err := countIPsBetween(initialIp, ip)
+			if err != nil {
+				return fmt.Errorf("Invalid CIDR format: %s", err)
+			}
+			finalPort := strconv.Itoa(initialPort + int(diffBetweenIps))
 			s.address = s.p.backend.Proxy + ":" + finalPort
 			printf("Server connected through proxy %s", s.address)
 		}
