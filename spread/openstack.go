@@ -712,6 +712,7 @@ func (p *openstackProvider) createMachine(ctx context.Context, system *System) (
 		Networks:         networks,
 		Metadata:         tags,
 		UserData:         []byte(cloudconfig),
+		ConfigDrive:      true, // needed because of CVE-2024-6174
 	}
 
 	// When the storage size is defined, then we use the volume generated
