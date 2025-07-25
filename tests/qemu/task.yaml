@@ -1,5 +1,7 @@
 summary: Test the qemu backend.
 
+manual: true
+
 prepare: |
     if ! kvm-ok; then
         echo "Nested KVM is not available on this system."
