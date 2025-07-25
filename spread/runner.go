@@ -40,6 +40,7 @@ type Options struct {
 	Seed           int64
 	Repeat         int
 	GarbageCollect bool
+	Collect        int
 	Perf           bool
 	Workers        int
 	Order          bool
@@ -114,7 +115,7 @@ func Start(project *Project, options *Options) (*Runner, error) {
 
 	if options.GarbageCollect {
 		for _, p := range r.providers {
-			if err := p.GarbageCollect(); err != nil {
+			if err := p.GarbageCollect(options.Collect); err != nil {
 				printf("Error collecting garbage from %q: %v", p.Backend().Name, err)
 			}
 		}
@@ -769,7 +770,7 @@ func (r *Runner) job(backend *Backend, system *System, suite *Suite, last *Job, 
 
 	// Find the current top priority for this backend and system.
 	var priority int64 = math.MinInt64
-	if ! r.options.Order {
+	if !r.options.Order {
 		for _, job := range r.pending {
 			if job != nil && job.Priority > priority && job.Backend == backend && job.System == system {
 				priority = job.Priority

@@ -696,7 +696,7 @@ func (p *googleProvider) removeMachine(ctx context.Context, s *googleServer) err
 	return err
 }
 
-func (p *googleProvider) GarbageCollect() error {
+func (p *googleProvider) GarbageCollect(collect int) error {
 	servers, err := p.list()
 	if err != nil {
 		return err

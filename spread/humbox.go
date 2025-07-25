@@ -121,7 +121,7 @@ func (s *humboxServer) Discard(ctx context.Context) error {
 	return s.p.removeMachine(ctx, s)
 }
 
-func (p *humboxProvider) GarbageCollect() error {
+func (p *humboxProvider) GarbageCollect(collect int) error {
 	return nil
 }
 
