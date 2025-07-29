@@ -333,6 +333,10 @@ func (c *Client) run(script string, dir string, env *Environment, mode outputMod
 		}
 		c.Run("reboot", "", nil)
 
+		// Wait 10 seconds until the remote instance is rebooting
+		// This prevents the ssh.dial gets stuck when the reboot starts
+		time.Sleep(10 * time.Second)
+
 		if err := c.dialOnReboot(bootID); err != nil {
 			return nil, err
 		}
