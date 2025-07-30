@@ -117,19 +117,34 @@ func (c *Client) dialOnReboot(prevBootID string) error {
 	waitConfig.Timeout = 5 * time.Second
 
 	for {
-		// Try to connect to the rebooting system, note that
-		// waitConfig is not well honored by golang, it is
-		// set to 5sec above but in reality it takes ~60sec
-		// before the code times out.
-		sshc, err := ssh.Dial("tcp", c.addr, &waitConfig)
+		// Attempt to establish a TCP connection to the target address with a 5-second timeout.
+		conn, err := net.DialTimeout("tcp", c.addr, 5*time.Second)
+		if err != nil {
+			// Connection failed (host may still be rebooting) — retry.
+			continue
+		}
+		// Set a 10-second deadline to ensure the SSH handshake doesn't block indefinitely.
+		conn.SetDeadline(time.Now().Add(10 * time.Second))
+
+		// Try to establish an SSH connection over the TCP socket.
+		clientConn, chans, reqs, err := ssh.NewClientConn(conn, c.addr, &waitConfig)
+		if err != nil {
+			// SSH handshake failed — likely still rebooting — close the TCP connection and retry.
+			conn.Close()
+			continue
+		}
+		// Successfully connected via SSH; create an SSH client.
+		sshc := ssh.NewClient(clientConn, chans, reqs)
+
 		if err == nil {
 			// once successfully connected, check boot_id to
-			// see if the reboot actually happend
+			// see if the reboot actually happened
 			c.sshc.Close()
 			c.sshc = sshc
 			curBootID, err := c.getBootID()
 			if err == nil {
 				if curBootID != prevBootID {
+					conn.SetDeadline(time.Time{})
 					return nil
 				}
 			}
@@ -332,10 +347,6 @@ func (c *Client) run(script string, dir string, env *Environment, mode outputMod
 			return nil, err
 		}
 		c.Run("reboot", "", nil)
-
-		// Wait 10 seconds until the remote instance is rebooting
-		// This prevents the ssh.dial gets stuck when the reboot starts
-		time.Sleep(10 * time.Second)
 
 		if err := c.dialOnReboot(bootID); err != nil {
 			return nil, err
