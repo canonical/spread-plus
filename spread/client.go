@@ -281,6 +281,7 @@ const (
 	combinedOutput
 	splitOutput
 	shellOutput
+	liveOutput
 	perfOutput
 )
 
@@ -304,6 +305,10 @@ func (c *Client) Trace(script string, dir string, env *Environment) (output []by
 func (c *Client) Shell(script string, dir string, env *Environment) error {
 	_, err := c.run(script, dir, env, shellOutput)
 	return err
+}
+
+func (c *Client) Live(script string, dir string, env *Environment) (output []byte, err error) {
+	return c.run(script, dir, env, liveOutput)
 }
 
 func (c *Client) Perf(script string, dir string, env *Environment) (output []byte, err error) {
@@ -475,6 +480,9 @@ func (c *Client) runPart(script string, dir string, env *Environment, mode outpu
 		cmd = c.sudo() + "/bin/bash -"
 		session.Stdout = &stdout
 		session.Stderr = &stderr
+	case liveOutput:
+		cmd = c.sudo() + "/bin/bash - 2>&1"
+		session.Stdout = os.Stdout
 	case perfOutput:
 		adddate := "awk '{cmd=\"(date +'%T.%3N')\"; cmd | getline d; print d,$0; close(cmd)}'"
 		cmd = c.sudo() + "/bin/bash - 2>&1 | " + adddate
@@ -525,11 +533,14 @@ func (c *Client) runPart(script string, dir string, env *Environment, mode outpu
 	if e, ok := err.(*ssh.ExitError); ok && e.ExitStatus() == 213 {
 		lines := bytes.Split(bytes.TrimSpace(stdout.Bytes()), []byte{'\n'})
 		m := commandExp.FindSubmatch(lines[len(lines)-1])
+		if len(m) > 0 && string(m[1]) == "ERROR" {
+			return nil, fmt.Errorf("%s", m[2])
+		}
 		if len(m) > 0 && string(m[1]) == "REBOOT" {
 			return append(previous, stdout.Bytes()...), &rebootError{string(m[2])}
 		}
-		if len(m) > 0 && string(m[1]) == "ERROR" {
-			return nil, fmt.Errorf("%s", m[2])
+		if mode == liveOutput {
+			return append(previous, stdout.Bytes()...), &rebootError{"Reboot"}
 		}
 	}
 
@@ -882,7 +893,7 @@ func (s *localScript) run() (stdout, stderr []byte, err error) {
 	cmd.Dir = s.dir
 	cmd.ExtraFiles = s.extraFiles
 	switch s.mode {
-	case traceOutput, combinedOutput:
+	case traceOutput, combinedOutput, liveOutput:
 		cmd.Stdout = &outbuf
 		cmd.Stderr = &outbuf
 	case splitOutput:
