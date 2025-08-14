@@ -1,4 +1,4 @@
-summary: Test the MATCH function.
+summary: Test the live parameter.
 
 prepare: |
     if [ ! -f .spread-reuse.yaml ]; then
