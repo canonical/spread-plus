@@ -33,6 +33,7 @@ Spread
 [AdHoc backend](#adhoc)  
 [More on parallelism](#parallelism)  
 [Repacking and delta uploads](#repacking)  
+[Live output](#live)
 [Performance output](#performance)    
 
 <a name="why"/>
@@ -1445,6 +1446,18 @@ prepare: |
 
 The `rename` and `exclude` settings used above ensure that the tarball that goes
 into `repack` looks like the one offered by GitHub.
+
+<a name="live"/>
+
+## Live output
+
+Spread provides detailed output for each task on real time while it is being executed. When using
+the `-live` parameter, spread displays the output while each phase prepare/execute/debug/restore is performed.
+
+This functionality is particularly useful for following execution on real time and gaining insight into the behavior
+and performance of individual tasks.
+
+The parameter can be used just when a single worker is used for the entire run, this prevents the output of different workers is mixed.
 
 <a name="performance"/>
 
