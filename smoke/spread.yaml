@@ -18,7 +18,7 @@ backends:
                 workers: 1
 
     openstack:
-        key: "$(HOST: echo $OS_PASSWORD)"
+        key: "$(HOST: echo $OS_CREDENTIALS_AMD64_PS6)"
         plan: staging-cpu2-ram4-disk20
         halt-timeout: 2h
         wait-timeout: 5m
