@@ -1,0 +1,28 @@
+summary: Test the live parameter.
+
+prepare: |
+    if [ ! -f .spread-reuse.yaml ]; then
+        touch /run/spread-reuse.yaml
+        ln -s /run/spread-reuse.yaml .spread-reuse.yaml
+    fi
+
+restore: |
+    rm -f exec1.out exec2.out exec3.out
+
+execute: |
+    # Check the task output is shown when -live is used
+    spread -live lxd:ubuntu-22.04:checks/task-a &> exec1.out
+    grep 'WORKS:task-a1' exec1.out
+    grep 'WORKS:task-a2' exec1.out
+    grep 'WORKS:task-a3' exec1.out
+
+    # Check the task output is not shown when -vv is not used
+    spread lxd:ubuntu-22.04:checks/task-a &> exec2.out
+    ! grep 'WORKS:task-a1' exec2.out
+    ! grep 'WORKS:task-a2' exec2.out
+    ! grep 'WORKS:task-a3' exec2.out
+
+    # Check the task output is shown after reboot when -live is used
+    spread -live lxd:ubuntu-22.04:checks/task-b &> exec3.out
+    grep 'WORKS:task-b1' exec3.out
+    grep 'WORKS:task-b2' exec3.out

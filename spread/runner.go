@@ -41,6 +41,7 @@ type Options struct {
 	Repeat         int
 	GarbageCollect bool
 	Collect        int
+	Live           bool
 	Perf           bool
 	Workers        int
 	Order          bool
@@ -218,6 +219,17 @@ func (r *Runner) loop() (err error) {
 					}
 				}
 			}
+		}
+	}
+
+	// It is allowed showing the output when 1 worker is used at all
+	if r.options.Live {
+		total := 0
+		for _, w := range workers {
+			total += w
+		}
+		if total > 1 {
+			return fmt.Errorf("Just 1 worker can be used at all when live output is required")
 		}
 	}
 
@@ -502,7 +514,9 @@ func (r *Runner) run(client *Client, job *Job, verb string, context interface{},
 
 	var err error
 	var out []byte
-	if r.options.Perf {
+	if r.options.Live {
+		_, err = client.Live(script, dir, job.Environment)
+	} else if r.options.Perf {
 		out, err = client.Perf(script, dir, job.Environment)
 	} else {
 		_, err = client.Trace(script, dir, job.Environment)
@@ -513,7 +527,7 @@ func (r *Runner) run(client *Client, job *Job, verb string, context interface{},
 		// the original start time so the error message shows the task time.
 		start = start.Add(1)
 		printft(start, startTime|endTime|startFold|endFold, "Error %s %s (%s) : %v", verb, contextStr, server.Label(), err)
-		if debug != "" {
+		if debug != "" && !r.options.Live {
 			var output []byte
 			start = time.Now()
 			output, err = client.Trace(debug, dir, job.Environment)
