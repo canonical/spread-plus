@@ -138,7 +138,7 @@ func (s *openstackServer) String() string {
 	if s.system == nil {
 		return s.d.Name
 	}
-	return fmt.Sprintf("%s (%s)", s.d.Name, s.d.Id)
+	return fmt.Sprintf("%s (%s)", s.system, s.d.Name)
 }
 
 func (s *openstackServer) Label() string {
@@ -803,9 +803,9 @@ func (p *openstackProvider) createMachine(ctx context.Context, system *System) (
 
 	if err != nil {
 		if p.removeMachine(ctx, s) != nil {
-			return nil, &FatalError{fmt.Errorf("cannot allocate or deallocate (!) new Openstack instance %s: %v", s, err)}
+			return nil, &FatalError{fmt.Errorf("cannot allocate or deallocate (!) new Openstack instance %s: %v", s.d.Name, err)}
 		}
-		return nil, &FatalError{fmt.Errorf("cannot allocate new Openstack instance %s: %v", s, err)}
+		return nil, &FatalError{fmt.Errorf("cannot allocate new Openstack instance %s (%s): %v", s.d.Name, s.d.Id, err)}
 	}
 
 	return s, nil
@@ -950,7 +950,7 @@ func (p *openstackProvider) removeServer(ctx context.Context, s *openstackServer
 		select {
 		case <-retry.C:
 		case <-timeout:
-			printf("cannot remove the openstack server %s: timeout reached with server status %s", s, server.Status)
+			printf("cannot remove the openstack server %s (%s): timeout reached with server status %s", server.Id, s.d.Name, server.Status)
 			return nil
 		}
 	}
