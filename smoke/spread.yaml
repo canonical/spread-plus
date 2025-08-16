@@ -116,8 +116,6 @@ backends:
                 image: snapd-spread/ubuntu-20.04-arm-64
             - ubuntu-22.04-arm-64:
                 image: snapd-spread/ubuntu-22.04-arm-64
-            - ubuntu-22.04-arm-64-uefi:
-                image: snapd-spread/ubuntu-22.04-arm-64-uefi
             - ubuntu-24.04-arm-64:
                 image: snapd-spread/ubuntu-24.04-arm-64
             - ubuntu-24.04-arm-64-uefi:
