@@ -805,7 +805,7 @@ func (p *openstackProvider) createMachine(ctx context.Context, system *System) (
 		if p.removeMachine(ctx, s) != nil {
 			return nil, &FatalError{fmt.Errorf("cannot allocate or deallocate (!) new Openstack instance %s: %v", s.d.Name, err)}
 		}
-		return nil, &FatalError{fmt.Errorf("cannot allocate new Openstack instance %s: %v", s.d.Name, err)}
+		return nil, &FatalError{fmt.Errorf("cannot allocate new Openstack instance %s (%s): %v", s.d.Name, s.d.Id, err)}
 	}
 
 	return s, nil
