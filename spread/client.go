@@ -130,9 +130,9 @@ func (c *Client) dialOnReboot(prevBootID string) error {
 		}
 
 		// Bound the SSH handshake to 10 seconds
-		_, cancelSSH := context.WithTimeout(ctx, 10*time.Second)
+		// Apply read/write deadlines so handshake won’t block forever
+		_ = conn.SetDeadline(time.Now().Add(10 * time.Second))
 		clientConn, chans, reqs, err := ssh.NewClientConn(conn, c.addr, c.config)
-		cancelSSH()
 		if err != nil {
 			conn.Close()
 			continue
