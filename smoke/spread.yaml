@@ -41,8 +41,6 @@ backends:
                   image: snapd-spread/opensuse-tumbleweed-64
             - centos-9-64:
                   image: snapd-spread/centos-9-64
-            - debian-12-64:
-                  image: snapd-spread/debian-12-64
             - debian-sid-64:
                   image: snapd-spread/debian-sid-64
 
@@ -93,6 +91,9 @@ backends:
             - amazon-linux-2023-64:
                 image: snapd-spread/amazon-linux-2023-64
                 storage: 50G
+
+            - debian-12-64:
+                  image: snapd-spread/debian-12-64
 
     openstack-arm-ps7:
         type: openstack

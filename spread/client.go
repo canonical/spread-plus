@@ -113,26 +113,31 @@ func (c *Client) dialOnReboot(prevBootID string) error {
 	retry := time.NewTicker(200 * time.Millisecond)
 	defer retry.Stop()
 
+	// Create a context that auto-cancels after killTimeout
+	ctx, cancel := context.WithTimeout(context.Background(), c.killTimeout)
+	defer cancel()
+
 	waitConfig := *c.config
 	waitConfig.Timeout = 5 * time.Second
 
 	for {
-		// Attempt to establish a TCP connection to the target address with a 5-second timeout.
-		conn, err := net.DialTimeout("tcp", c.addr, 5*time.Second)
+		// Try to establish a TCP connection with timeout
+		dialCtx, cancelDial := context.WithTimeout(ctx, 5*time.Second)
+		conn, err := (&net.Dialer{}).DialContext(dialCtx, "tcp", c.addr)
+		cancelDial()
 		if err != nil {
-			// Connection failed (host may still be rebooting) — retry.
-			continue
+			continue // still rebooting
 		}
-		// Set a 10-second deadline to ensure the SSH handshake doesn't block indefinitely.
-		conn.SetDeadline(time.Now().Add(10 * time.Second))
 
-		// Try to establish an SSH connection over the TCP socket.
-		clientConn, chans, reqs, err := ssh.NewClientConn(conn, c.addr, &waitConfig)
+		// Bound the SSH handshake to 10 seconds
+		// Apply read/write deadlines so handshake won’t block forever
+		_ = conn.SetDeadline(time.Now().Add(10 * time.Second))
+		clientConn, chans, reqs, err := ssh.NewClientConn(conn, c.addr, c.config)
 		if err != nil {
-			// SSH handshake failed — likely still rebooting — close the TCP connection and retry.
 			conn.Close()
 			continue
 		}
+
 		// Successfully connected via SSH; create an SSH client.
 		sshc := ssh.NewClient(clientConn, chans, reqs)
 

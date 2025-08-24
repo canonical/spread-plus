@@ -71,7 +71,7 @@ type Backend struct {
 	Proxy string
 	// the expected format is a list of CIDR:port
 	CIDRPortRel      []string `yaml:"cidr-port-rel"`
-	VolumeAutoDelete bool     `yaml:"volume-auto-delete"`
+	VolumeAutoDelete *bool    `yaml:"volume-auto-delete"`
 
 	// Only for OpenStack so far
 	Networks []string

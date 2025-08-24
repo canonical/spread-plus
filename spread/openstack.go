@@ -750,9 +750,12 @@ func (p *openstackProvider) createMachine(ctx context.Context, system *System) (
 		storage = 20
 	}
 
+	// By default volumes are deleted on termination
 	deleteOnTermination := false
-	if p.backend.VolumeAutoDelete {
+	if p.backend.VolumeAutoDelete == nil {
 		deleteOnTermination = true
+	} else {
+		deleteOnTermination = *p.backend.VolumeAutoDelete
 	}
 
 	opts.BlockDeviceMappings = []nova.BlockDeviceMapping{{
