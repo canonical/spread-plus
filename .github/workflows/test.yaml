@@ -149,7 +149,7 @@ jobs:
           OS_REGION_NAME: ${{ secrets.OS_REGION_NAME }}
           OS_USER_DOMAIN_NAME: ${{ vars.OS_USER_DOMAIN_NAME }}
           OS_USERNAME: ${{ secrets.OS_USERNAME }}
-          OS_SKIP: ${{ vars.SKIP_OPENSTACK }}
+          OS_SKIP: ${{ vars.SKIP_OPENSTACK_AMD64_PS6 }}
           SPREAD_PARAMS: ${{ vars.SPREAD_PARAMS }}
       run: |
           if [ "$OS_SKIP" == true ]; then
@@ -204,7 +204,7 @@ jobs:
           OS_REGION_NAME: ${{ secrets.OS_REGION_NAME }}
           OS_USER_DOMAIN_NAME: ${{ vars.OS_USER_DOMAIN_NAME }}
           OS_USERNAME: ${{ secrets.OS_USERNAME }}
-          OS_SKIP: ${{ vars.SKIP_OPENSTACK }}
+          OS_SKIP: ${{ vars.SKIP_OPENSTACK_AMD64_PS7 }}
           SPREAD_PARAMS: ${{ vars.SPREAD_PARAMS }}
       run: |
           if [ "$OS_SKIP" == true ]; then
@@ -259,7 +259,7 @@ jobs:
           OS_REGION_NAME: ${{ secrets.OS_REGION_NAME }}
           OS_USER_DOMAIN_NAME: ${{ vars.OS_USER_DOMAIN_NAME }}
           OS_USERNAME: ${{ secrets.OS_USERNAME }}
-          OS_SKIP: ${{ vars.SKIP_OPENSTACK }}
+          OS_SKIP: ${{ vars.SKIP_OPENSTACK_ARM64_PS7 }}
           SPREAD_PARAMS: ${{ vars.SPREAD_PARAMS }}
       run: |
           if [ "$OS_SKIP" == true ]; then
