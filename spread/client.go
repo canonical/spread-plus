@@ -134,6 +134,7 @@ func (c *Client) dialOnReboot(prevBootID string) error {
 			clientConn, chans, reqs, err := ssh.NewClientConn(conn, c.addr, c.config)
 			if err != nil {
 				conn.Close()
+				time.Sleep(1 * time.Second) // handshake failed, add extra sleep
 			} else {
 				// Successfully connected via SSH; create an SSH client.
 				sshc := ssh.NewClient(clientConn, chans, reqs)
