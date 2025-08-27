@@ -41,6 +41,7 @@ jobs:
     name: Integration Tests
     needs: [build]
     runs-on: [self-hosted, spread-enabled]
+    environment: OS_AMD64_PS7
 
     steps:
     - name: Ensure the workspace is clean
@@ -59,7 +60,15 @@ jobs:
 
     - name: Integration tests
       env:
-          SPREAD_GOOGLE_KEY: ${{ secrets.SPREAD_GOOGLE_KEY }}
+          OS_AUTH_URL: ${{ secrets.OS_AUTH_URL }}
+          OS_IDENTITY_API_VERSION: ${{ vars.OS_IDENTITY_API_VERSION }}
+          OS_INTERFACE: ${{ vars.OS_INTERFACE }}
+          OS_PASSWORD: ${{ secrets.OS_PASSWORD }}
+          OS_PROJECT_DOMAIN_NAME: ${{ vars.OS_PROJECT_DOMAIN_NAME }}
+          OS_PROJECT_NAME: ${{ secrets.OS_PROJECT_NAME }}
+          OS_REGION_NAME: ${{ secrets.OS_REGION_NAME }}
+          OS_USER_DOMAIN_NAME: ${{ vars.OS_USER_DOMAIN_NAME }}
+          OS_USERNAME: ${{ secrets.OS_USERNAME }}
       run: |      
           chmod +x "${{ github.workspace }}"/bin/spread-plus
           # "pipefail" ensures that a non-zero status from the spread is propagated
