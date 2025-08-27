@@ -113,8 +113,6 @@ func (c *Client) dialOnReboot(prevBootID string) error {
 	retry := time.NewTicker(200 * time.Millisecond)
 	defer retry.Stop()
 
-	connectionAttempt := 0
-
 	// Create a context that auto-cancels after killTimeout
 	ctx, cancel := context.WithTimeout(context.Background(), c.killTimeout)
 	defer cancel()
@@ -123,48 +121,36 @@ func (c *Client) dialOnReboot(prevBootID string) error {
 	waitConfig.Timeout = 5 * time.Second
 
 	for {
-		connectionAttempt += 1
-		if connectionAttempt >= maxReconnectionAttempts {
-			return fmt.Errorf("Max number of connection attempts reached after reboot")
-		}
 
 		// Try to establish a TCP connection with timeout
 		dialCtx, cancelDial := context.WithTimeout(ctx, 5*time.Second)
 		conn, err := (&net.Dialer{}).DialContext(dialCtx, "tcp", c.addr)
-		cancelDial()
 		if err != nil {
-			time.Sleep(1 * time.Second)
-			continue // still rebooting
-		}
+			cancelDial()
+		} else {
+			// Bound the SSH handshake to 10 seconds
+			// Apply read/write deadlines so handshake won’t block forever
+			_ = conn.SetDeadline(time.Now().Add(10 * time.Second))
+			clientConn, chans, reqs, err := ssh.NewClientConn(conn, c.addr, c.config)
+			if err != nil {
+				conn.Close()
+			} else {
+				// Successfully connected via SSH; create an SSH client.
+				sshc := ssh.NewClient(clientConn, chans, reqs)
 
-		// Bound the SSH handshake to 10 seconds
-		// Apply read/write deadlines so handshake won’t block forever
-		_ = conn.SetDeadline(time.Now().Add(10 * time.Second))
-		clientConn, chans, reqs, err := ssh.NewClientConn(conn, c.addr, c.config)
-		if err != nil {
-			conn.Close()
-			time.Sleep(1 * time.Second)
-			continue
-		}
-
-		// Successfully connected via SSH; create an SSH client.
-		sshc := ssh.NewClient(clientConn, chans, reqs)
-
-		if err == nil {
-			// once successfully connected, check boot_id to
-			// see if the reboot actually happened
-			c.sshc.Close()
-			c.sshc = sshc
-			curBootID, err := c.getBootID()
-			if err == nil {
-				if curBootID != prevBootID {
-					conn.SetDeadline(time.Time{})
-					return nil
+				// once successfully connected, check boot_id to
+				// see if the reboot actually happened
+				c.sshc.Close()
+				c.sshc = sshc
+				curBootID, err := c.getBootID()
+				if err == nil {
+					if curBootID != prevBootID {
+						printf("Connected after reboot to %s", c.job)
+						return nil
+					}
 				}
 			}
 		}
-
-		time.Sleep(1 * time.Second)
 
 		// Use multiple selects to ensure that the channels get
 		// checked in the right order. If a single select is used
@@ -338,7 +324,6 @@ type rebootError struct {
 func (e *rebootError) Error() string { return "reboot requested" }
 
 const maxReboots = 10
-const maxReconnectionAttempts = 300
 
 func (c *Client) doReboot() error {
 	printf("Rebooting on %s as requested...", c.job)
