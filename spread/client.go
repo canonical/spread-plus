@@ -121,12 +121,12 @@ func (c *Client) dialOnReboot(prevBootID string) error {
 	waitConfig.Timeout = 5 * time.Second
 
 	for {
-
 		// Try to establish a TCP connection with timeout
 		dialCtx, cancelDial := context.WithTimeout(ctx, 5*time.Second)
 		conn, err := (&net.Dialer{}).DialContext(dialCtx, "tcp", c.addr)
+		defer cancelDial()
 		if err != nil {
-			cancelDial()
+			// handshake failed
 		} else {
 			// Bound the SSH handshake to 10 seconds
 			// Apply read/write deadlines so handshake won’t block forever
