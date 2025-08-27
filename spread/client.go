@@ -338,7 +338,7 @@ type rebootError struct {
 func (e *rebootError) Error() string { return "reboot requested" }
 
 const maxReboots = 10
-const maxReconnectionAttempts = 180
+const maxReconnectionAttempts = 300
 
 func (c *Client) doReboot() error {
 	printf("Rebooting on %s as requested...", c.job)
