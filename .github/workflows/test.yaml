@@ -65,7 +65,7 @@ jobs:
           # "pipefail" ensures that a non-zero status from the spread is propagated
           (
             set -o pipefail
-            "${{ github.workspace }}/bin/spread-plus" google:tests/ | tee spread.log
+            "${{ github.workspace }}/bin/spread-plus" openstack:tests/ | tee spread.log
           )
 
     - name: Discard spread workers

@@ -23,6 +23,26 @@ backends:
             - ubuntu-22.04-64:
                 image: ubuntu-2204-64-virt-enabled
                 workers: 1
+    openstack:
+        key: '$(HOST: echo "$OS_CREDENTIALS_AMD64_PS7")'
+        plan: shared.small
+        halt-timeout: 2h
+        wait-timeout: 5m
+        groups: [default]
+        proxy: ingress-haproxy.ps7.canonical.com
+        cidr-port-rel: [10.151.96.0/21:5000]
+        volume-auto-delete: true
+        environment:
+            HTTP_PROXY: 'http://egress.ps7.internal:3128'
+            HTTPS_PROXY: 'http://egress.ps7.internal:3128'
+            http_proxy: 'http://egress.ps7.internal:3128'
+            https_proxy: 'http://egress.ps7.internal:3128'
+            no_proxy: '127.0.0.1,127.0.0.53,localhost'
+            NO_PROXY: '127.0.0.1,127.0.0.53,localhost'
+            NTP_SERVER: 'ntp.ps7.internal'
+        systems:
+            - ubuntu-22.04-64:
+                image: snapd-spread/ubuntu-22.04-64
 
 exclude:
     - .spread-reuse.yaml
@@ -31,7 +51,7 @@ exclude:
 
 path: /home/test/src/github.com/snapcore/spread
 
-kill-timeout: 5m
+kill-timeout: 10m
 warn-timeout: 2m
 
 suites:
@@ -45,8 +65,24 @@ prepare: |
         apt install -y $DEBS
     fi
 
+    if [ -n "${http_proxy:-}" ]; then
+        snap set system proxy.http="$http_proxy"
+    fi
+    if [ -n "${https_proxy:-}" ]; then
+        snap set system proxy.https="$https_proxy"
+    fi
+
     snap install lxd
     lxd waitready
+
+    if [ -n "${http_proxy:-}" ]; then
+        lxd.lxc config set core.proxy_http "$http_proxy"
+        lxd.lxc profile set default environment.http_proxy "$http_proxy"
+    fi
+    if [ -n "${https_proxy:-}" ]; then
+        lxd.lxc config set core.proxy_https "$https_proxy"
+        lxd.lxc profile set default environment.https_proxy "$https_proxy"
+    fi
     lxd init --auto
 
     # Either use pregenerated spread if exists or build it
