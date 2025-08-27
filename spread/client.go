@@ -113,21 +113,15 @@ func (c *Client) dialOnReboot(prevBootID string) error {
 	retry := time.NewTicker(200 * time.Millisecond)
 	defer retry.Stop()
 
-	connectionAttempt := 0
-
 	waitConfig := *c.config
 	waitConfig.Timeout = 5 * time.Second
 
 	for {
-		connectionAttempt += 1
-		if connectionAttempt >= maxReconnectionAttempts {
-			return fmt.Errorf("Max number of connection attempts reached after reboot")
-		}
 
 		// Try to establish a TCP connection with timeout
 		conn, err := net.DialTimeout("tcp", c.addr, 5*time.Second)
 		if err != nil {
-			time.Sleep(1 * time.Second)
+			time.Sleep(1 * time.Second) // still rebooting, add extra sleep
 			// still rebooting
 		} else {
 			// Set a 10-second deadline to ensure the SSH handshake doesn't block indefinitely.
@@ -141,7 +135,6 @@ func (c *Client) dialOnReboot(prevBootID string) error {
 			} else {
 				// Remove the deadline set for the handshake
 				conn.SetDeadline(time.Time{})
-
 				// Successfully connected via SSH; create an SSH client.
 				sshc := ssh.NewClient(clientConn, chans, reqs)
 
@@ -158,11 +151,10 @@ func (c *Client) dialOnReboot(prevBootID string) error {
 				} else {
 					// ssh still not ready to retrieve bootId
 					time.Sleep(200 * time.Millisecond)
+					}
 				}
 			}
 		}
-
-		time.Sleep(1 * time.Second)
 
 		// Use multiple selects to ensure that the channels get
 		// checked in the right order. If a single select is used
@@ -336,7 +328,6 @@ type rebootError struct {
 func (e *rebootError) Error() string { return "reboot requested" }
 
 const maxReboots = 10
-const maxReconnectionAttempts = 300
 
 func (c *Client) doReboot() error {
 	printf("Rebooting on %s as requested...", c.job)
