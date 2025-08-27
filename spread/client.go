@@ -107,8 +107,8 @@ func (c *Client) ResetJob() {
 
 func (c *Client) dialOnReboot(prevBootID string) error {
 	// First wait until SSH isn't working anymore.
-	timeout := time.After(c.killTimeout)
-	relog := time.NewTicker(c.warnTimeout)
+	timeout := time.After(10 * time.Minute)
+	relog := time.NewTicker(3 * time.Minute)
 	defer relog.Stop()
 	retry := time.NewTicker(200 * time.Millisecond)
 	defer retry.Stop()
