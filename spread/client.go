@@ -120,16 +120,16 @@ func (c *Client) dialOnReboot(prevBootID string) error {
 		// Try to establish a TCP connection with timeout
 		conn, err := net.DialTimeout("tcp", c.addr, 5*time.Second)
 		if err != nil {
+			time.Sleep(1 * time.Second)
 			// still rebooting
-			time.Sleep(500 * time.Millisecond)
 		} else {
 			// Set a 10-second deadline to ensure the SSH handshake doesn't block indefinitely.
 			conn.SetDeadline(time.Now().Add(10 * time.Second))
 			// Try to establish an SSH connection over the TCP socket.
 			clientConn, chans, reqs, err := ssh.NewClientConn(conn, c.addr, &waitConfig)
-
 			if err != nil {
 				// SSH handshake failed — likely still rebooting — close the TCP connection and retry.
+				time.Sleep(500 * time.Millisecond)
 				conn.Close()
 			} else {
 				// Successfully connected via SSH; create an SSH client.
@@ -145,6 +145,9 @@ func (c *Client) dialOnReboot(prevBootID string) error {
 						printf("Connected after reboot to %s", c.job)
 						return nil
 					}
+				} else {
+					// ssh still not ready to retrieve bootId
+					time.Sleep(200 * time.Millisecond)
 				}
 			}
 		}
@@ -355,7 +358,6 @@ func (c *Client) run(script string, dir string, env *Environment, mode outputMod
 		if err := c.dialOnReboot(bootID); err != nil {
 			return nil, err
 		}
-
 	}
 	panic("unreachable")
 }
