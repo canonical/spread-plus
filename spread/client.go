@@ -121,6 +121,7 @@ func (c *Client) dialOnReboot(prevBootID string) error {
 		// Try to establish a TCP connection with timeout
 		conn, err := net.DialTimeout("tcp", c.addr, 5*time.Second)
 		if err != nil {
+			cancelDial()
 			time.Sleep(1 * time.Second) // still rebooting, add extra sleep
 			// still rebooting
 		} else {
