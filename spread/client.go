@@ -117,12 +117,10 @@ func (c *Client) dialOnReboot(prevBootID string) error {
 	waitConfig.Timeout = 5 * time.Second
 
 	for {
-
 		// Try to establish a TCP connection with timeout
 		conn, err := net.DialTimeout("tcp", c.addr, 5*time.Second)
 		if err != nil {
-			cancelDial()
-			time.Sleep(1 * time.Second) // still rebooting, add extra sleep
+			time.Sleep(1 * time.Second)
 			// still rebooting
 		} else {
 			// Set a 10-second deadline to ensure the SSH handshake doesn't block indefinitely.
@@ -136,6 +134,7 @@ func (c *Client) dialOnReboot(prevBootID string) error {
 			} else {
 				// Remove the deadline set for the handshake
 				conn.SetDeadline(time.Time{})
+
 				// Successfully connected via SSH; create an SSH client.
 				sshc := ssh.NewClient(clientConn, chans, reqs)
 
@@ -152,7 +151,6 @@ func (c *Client) dialOnReboot(prevBootID string) error {
 				} else {
 					// ssh still not ready to retrieve bootId
 					time.Sleep(200 * time.Millisecond)
-					}
 				}
 			}
 		}
@@ -330,22 +328,6 @@ func (e *rebootError) Error() string { return "reboot requested" }
 
 const maxReboots = 10
 
-func (c *Client) doReboot() error {
-	printf("Rebooting on %s as requested...", c.job)
-
-	bootID, err := c.getBootID()
-	if err != nil {
-		return err
-	}
-	c.Run("reboot", "", nil)
-
-	if err := c.dialOnReboot(bootID); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func (c *Client) run(script string, dir string, env *Environment, mode outputMode) (output []byte, err error) {
 	if env == nil {
 		env = NewEnvironment()
@@ -365,11 +347,18 @@ func (c *Client) run(script string, dir string, env *Environment, mode outputMod
 			return nil, fmt.Errorf("rebooted on %s more than %d times", c.job, maxReboots)
 		}
 
+		printf("Rebooting on %s as requested...", c.job)
+
 		rebootKey = rerr.Key
 		output = append(output, '\n')
 
-		err := c.doReboot()
+		bootID, err := c.getBootID()
 		if err != nil {
+			return nil, err
+		}
+		c.Run("reboot", "", nil)
+
+		if err := c.dialOnReboot(bootID); err != nil {
 			return nil, err
 		}
 	}
