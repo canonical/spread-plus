@@ -113,6 +113,8 @@ func (c *Client) dialOnReboot(prevBootID string) error {
 	retry := time.NewTicker(200 * time.Millisecond)
 	defer retry.Stop()
 
+	connectionAttempt := 0
+
 	// Create a context that auto-cancels after killTimeout
 	ctx, cancel := context.WithTimeout(context.Background(), c.killTimeout)
 	defer cancel()
@@ -121,11 +123,17 @@ func (c *Client) dialOnReboot(prevBootID string) error {
 	waitConfig.Timeout = 5 * time.Second
 
 	for {
+		connectionAttempt += 1
+		if connectionAttempt >= maxReconnectionAttempts {
+			return fmt.Errorf("Max number of connection attempts reached after reboot")
+		}
+
 		// Try to establish a TCP connection with timeout
 		dialCtx, cancelDial := context.WithTimeout(ctx, 5*time.Second)
 		conn, err := (&net.Dialer{}).DialContext(dialCtx, "tcp", c.addr)
 		cancelDial()
 		if err != nil {
+			time.Sleep(1 * time.Second)
 			continue // still rebooting
 		}
 
@@ -135,6 +143,7 @@ func (c *Client) dialOnReboot(prevBootID string) error {
 		clientConn, chans, reqs, err := ssh.NewClientConn(conn, c.addr, c.config)
 		if err != nil {
 			conn.Close()
+			time.Sleep(1 * time.Second)
 			continue
 		}
 
@@ -154,6 +163,8 @@ func (c *Client) dialOnReboot(prevBootID string) error {
 				}
 			}
 		}
+
+		time.Sleep(1 * time.Second)
 
 		// Use multiple selects to ensure that the channels get
 		// checked in the right order. If a single select is used
@@ -327,6 +338,23 @@ type rebootError struct {
 func (e *rebootError) Error() string { return "reboot requested" }
 
 const maxReboots = 10
+const maxReconnectionAttempts = 300
+
+func (c *Client) doReboot() error {
+	printf("Rebooting on %s as requested...", c.job)
+
+	bootID, err := c.getBootID()
+	if err != nil {
+		return err
+	}
+	c.Run("reboot", "", nil)
+
+	if err := c.dialOnReboot(bootID); err != nil {
+		return err
+	}
+
+	return nil
+}
 
 func (c *Client) run(script string, dir string, env *Environment, mode outputMode) (output []byte, err error) {
 	if env == nil {
@@ -347,18 +375,11 @@ func (c *Client) run(script string, dir string, env *Environment, mode outputMod
 			return nil, fmt.Errorf("rebooted on %s more than %d times", c.job, maxReboots)
 		}
 
-		printf("Rebooting on %s as requested...", c.job)
-
 		rebootKey = rerr.Key
 		output = append(output, '\n')
 
-		bootID, err := c.getBootID()
+		err := c.doReboot()
 		if err != nil {
-			return nil, err
-		}
-		c.Run("reboot", "", nil)
-
-		if err := c.dialOnReboot(bootID); err != nil {
 			return nil, err
 		}
 	}
