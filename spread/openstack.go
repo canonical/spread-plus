@@ -419,18 +419,6 @@ func (p *openstackProvider) findImage(imageName string) (*glance.ImageDetail, er
 	return nil, &FatalError{fmt.Errorf("cannot find matching image for %q", imageName)}
 }
 
-func (p *openstackProvider) findAvailabilityZone() (*nova.AvailabilityZone, error) {
-	zones, err := p.computeClient.ListAvailabilityZones()
-	if err != nil {
-		return nil, fmt.Errorf("cannot retrieve availability zones: %v", &openstackError{err})
-	}
-
-	if len(zones) == 0 {
-		return nil, &FatalError{errors.New("cannot find any availability zones")}
-	}
-	return &zones[0], nil
-}
-
 func (p *openstackProvider) findSecurityGroupNames(names []string) ([]nova.SecurityGroupName, error) {
 	var secGroupNames []nova.SecurityGroupName
 
@@ -711,11 +699,6 @@ func (p *openstackProvider) createMachine(ctx context.Context, system *System) (
 		return nil, err
 	}
 
-	availabilityZone, err := p.findAvailabilityZone()
-	if err != nil {
-		return nil, err
-	}
-
 	// cloud init script
 	cloudconfig := fmt.Sprintf(openstackCloudInitScript, p.options.Password)
 
@@ -728,14 +711,13 @@ func (p *openstackProvider) createMachine(ctx context.Context, system *System) (
 	}
 
 	opts := nova.RunServerOpts{
-		Name:             name,
-		ImageId:          image.Id,
-		FlavorId:         flavor.Id,
-		AvailabilityZone: availabilityZone.Name,
-		Networks:         networks,
-		Metadata:         tags,
-		UserData:         []byte(cloudconfig),
-		ConfigDrive:      true, // needed because of CVE-2024-6174
+		Name:        name,
+		ImageId:     image.Id,
+		FlavorId:    flavor.Id,
+		Networks:    networks,
+		Metadata:    tags,
+		UserData:    []byte(cloudconfig),
+		ConfigDrive: true, // needed because of CVE-2024-6174
 	}
 
 	// When the storage size is defined, then we use the volume generated
@@ -773,6 +755,10 @@ func (p *openstackProvider) createMachine(ctx context.Context, system *System) (
 			return nil, err
 		}
 		opts.SecurityGroupNames = sgNames
+	}
+
+	if len(p.backend.Location) > 0 {
+		opts.AvailabilityZone = p.backend.Location
 	}
 
 	server, err := p.computeClient.RunServer(opts)
