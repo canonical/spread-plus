@@ -1,7 +1,6 @@
 summary: Ensure reboot works.
 
 execute: |
-    env | MATCH "SPREAD_REBOOT"
     if [ "$SPREAD_REBOOT" = 0 ]; then
         REBOOT
     fi
