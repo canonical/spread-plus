@@ -118,13 +118,13 @@ func (c *Client) dialOnReboot(prevBootID string) error {
 
 	for {
 		// Try to establish a TCP connection with timeout
-		conn, err := net.DialTimeout("tcp", c.addr, 5*time.Second)
+		conn, err := net.DialTimeout("tcp", c.addr, 10*time.Second)
 		if err != nil {
 			time.Sleep(1 * time.Second)
 			// still rebooting
 		} else {
 			// Set a 10-second deadline to ensure the SSH handshake doesn't block indefinitely.
-			conn.SetDeadline(time.Now().Add(10 * time.Second))
+			conn.SetDeadline(time.Now().Add(15 * time.Second))
 			// Try to establish an SSH connection over the TCP socket.
 			clientConn, chans, reqs, err := ssh.NewClientConn(conn, c.addr, &waitConfig)
 			if err != nil {
@@ -132,9 +132,6 @@ func (c *Client) dialOnReboot(prevBootID string) error {
 				time.Sleep(500 * time.Millisecond)
 				conn.Close()
 			} else {
-				// Remove the deadline set for the handshake
-				conn.SetDeadline(time.Time{})
-
 				// Successfully connected via SSH; create an SSH client.
 				sshc := ssh.NewClient(clientConn, chans, reqs)
 
@@ -142,7 +139,14 @@ func (c *Client) dialOnReboot(prevBootID string) error {
 				// see if the reboot actually happened
 				c.sshc.Close()
 				c.sshc = sshc
+
+				// Try to get the boot_id to detect if reboot is complete
+				conn.SetDeadline(time.Now().Add(15 * time.Second))
 				curBootID, err := c.getBootID()
+
+				// Remove the deadline set for the handshake
+				conn.SetDeadline(time.Time{})
+
 				if err == nil {
 					if curBootID != prevBootID {
 						printf("Connected after reboot to %s", c.job)
