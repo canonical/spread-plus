@@ -137,8 +137,6 @@ func (c *Client) dialOnReboot(prevBootID string) error {
 				conn.Close()
 			} else {
 				printf("Handshake worked on %s", c.job)
-				// Remove the deadline set for the handshake
-				conn.SetDeadline(time.Time{})
 
 				// Successfully connected via SSH; create an SSH client.
 				sshc := ssh.NewClient(clientConn, chans, reqs)
@@ -148,7 +146,14 @@ func (c *Client) dialOnReboot(prevBootID string) error {
 				c.sshc.Close()
 				c.sshc = sshc
 				printf("Getting boot id on %s", c.job)
+
+				// Try to get the boot_id to detect if reboot is complete
+				conn.SetDeadline(time.Now().Add(10 * time.Second))
 				curBootID, err := c.getBootID()
+
+				// Remove the deadline set for the handshake
+				conn.SetDeadline(time.Time{})
+
 				if err == nil {
 					if curBootID != prevBootID {
 						printf("Connected after reboot to %s", c.job)
