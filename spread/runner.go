@@ -3,6 +3,7 @@ package spread
 import (
 	"bytes"
 	"compress/gzip"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -37,6 +38,7 @@ type Options struct {
 	Discard        bool
 	Artifacts      string
 	Logs           string
+	Json           string
 	Seed           int64
 	Repeat         int
 	GarbageCollect bool
@@ -69,6 +71,7 @@ type Runner struct {
 	sequence map[*Job]int
 	last     int
 	stats    stats
+	report   *Report
 
 	suiteWorkers map[[3]string]int
 }
@@ -81,6 +84,7 @@ func Start(project *Project, options *Options) (*Runner, error) {
 		reserved:  make(map[string]bool),
 		sequence:  make(map[*Job]int),
 		last:      0,
+		report:    NewReport(),
 
 		suiteWorkers: make(map[[3]string]int),
 	}
@@ -171,9 +175,11 @@ func (r *Runner) loop() (err error) {
 			for _, job := range r.pending {
 				if job != nil {
 					r.add(&r.stats.TaskAbort, job)
+					r.report.addAbortedTask(job.Backend.Name, job.System.Name, job.Suite.Name, job.Task.Name, job.Variant)
 				}
 			}
 			r.stats.log()
+			r.createReport()
 		}
 		if !r.options.Reuse || r.options.Discard {
 			for len(r.servers) > 0 {
@@ -492,6 +498,7 @@ func (r *Runner) run(client *Client, job *Job, verb string, context interface{},
 	} else {
 		printft(start, startTime, "%s %s (%s)...", strings.Title(verb), contextStr, server.Label())
 	}
+	reportItem := r.report.addItem(verb, job.Backend.Name, job.System.Name, job.Suite.Name, job.Task.Name, job.Variant, server.Label())
 	var dir string
 	if context == job.Backend || context == job.Project {
 		dir = r.project.RemotePath
@@ -521,6 +528,8 @@ func (r *Runner) run(client *Client, job *Job, verb string, context interface{},
 	} else {
 		_, err = client.Trace(script, dir, job.Environment)
 	}
+	reportItem.addStatus(err == nil)
+
 	printft(start, endTime, "")
 	if err != nil {
 		// Use a different time so it has a different id on Travis, but keep
@@ -1145,6 +1154,28 @@ func (r *Runner) reuseServer(backend *Backend, system *System) *Client {
 		}
 
 		return client
+	}
+	return nil
+}
+
+func (r *Runner) createReport() error {
+	if len(r.options.Json) > 0 {
+		filename := r.options.Json
+
+		// Add results to the report
+		r.report.addTaskResults(len(r.stats.TaskDone), len(r.stats.TaskError), len(r.stats.TaskAbort), len(r.stats.TaskPrepareError), len(r.stats.TaskRestoreError))
+		r.report.addSuiteResults(len(r.stats.SuitePrepareError), len(r.stats.SuiteRestoreError))
+		r.report.addBackendResults(len(r.stats.BackendPrepareError), len(r.stats.BackendRestoreError))
+		r.report.addProjectResults(len(r.stats.ProjectPrepareError), len(r.stats.ProjectRestoreError))
+
+		bytes, err := json.MarshalIndent(r.report, "", "    ")
+		if err != nil {
+			return fmt.Errorf("cannot indent the json report: %v", err)
+		}
+		err = os.WriteFile(filename, bytes, 0644)
+		if err != nil {
+			return fmt.Errorf("cannot write JSONUnit report to %s file: %v", filename, err)
+		}
 	}
 	return nil
 }

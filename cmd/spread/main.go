@@ -33,6 +33,7 @@ var (
 	discard        = flag.Bool("discard", false, "Discard reused servers without running")
 	artifacts      = flag.String("artifacts", "", "Where to store task artifacts")
 	logs           = flag.String("logs", "", "Where to store generated logs")
+	json           = flag.String("json", "", "Where to store json results output")
 	seed           = flag.Int64("seed", 0, "Seed for job order permutation")
 	repeat         = flag.Int("repeat", 0, "Number of times to repeat each task")
 	garbageCollect = flag.Bool("gc", false, "Garbage collect backend resources when possible")
@@ -102,6 +103,7 @@ func run() error {
 		Discard:        *discard,
 		Artifacts:      *artifacts,
 		Logs:           *logs,
+		Json:           *json,
 		Seed:           *seed,
 		Repeat:         *repeat,
 		GarbageCollect: *garbageCollect,
