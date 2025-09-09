@@ -3,7 +3,7 @@ summary: test
 details: test
 
 prepare: |
-  exit 1
+  exit 0
 
 execute: |
   exit 0
