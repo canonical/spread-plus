@@ -175,11 +175,10 @@ func (r *Runner) loop() (err error) {
 			for _, job := range r.pending {
 				if job != nil {
 					r.add(&r.stats.TaskAbort, job)
-					r.report.addAbortedTask(job.Backend.Name, job.System.Name, job.Suite.Name, job.Task.Name, job.Variant)
 				}
 			}
 			r.stats.log()
-			r.createReport()
+			r.completeReport()
 		}
 		if !r.options.Reuse || r.options.Discard {
 			for len(r.servers) > 0 {
@@ -1158,9 +1157,14 @@ func (r *Runner) reuseServer(backend *Backend, system *System) *Client {
 	return nil
 }
 
-func (r *Runner) createReport() error {
+func (r *Runner) completeReport() error {
 	if len(r.options.Json) > 0 {
 		filename := r.options.Json
+
+		// Add aborted tasks to the report
+		for _, job := range r.stats.TaskAbort {
+			r.report.addAbortedTask(job.Backend.Name, job.System.Name, job.Suite.Name, job.Task.Name, job.Variant)
+		}
 
 		// Add results to the report
 		r.report.addTaskResults(len(r.stats.TaskDone), len(r.stats.TaskError), len(r.stats.TaskAbort), len(r.stats.TaskPrepareError), len(r.stats.TaskRestoreError))

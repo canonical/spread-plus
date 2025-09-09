@@ -93,8 +93,8 @@ func (r *Report) addTaskResults(passed int, failed int, aborted int, prepareFail
 }
 
 func (r *Report) addSuiteResults(prepareFailed int, restoreFailed int) {
-	r.ExecutionResults.TaskPrepareFailed = prepareFailed
-	r.ExecutionResults.TaskRestoreFailed = restoreFailed
+	r.ExecutionResults.SuitePrepareFailed = prepareFailed
+	r.ExecutionResults.SuiteRestoreFailed = restoreFailed
 }
 
 func (r *Report) addBackendResults(prepareFailed int, restoreFailed int) {

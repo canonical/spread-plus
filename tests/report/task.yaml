@@ -1,0 +1,83 @@
+summary: Test the json report
+
+prepare: |
+    if [ ! -f .spread-reuse.yaml ]; then
+        touch /run/spread-reuse.yaml
+        ln -s /run/spread-reuse.yaml .spread-reuse.yaml
+    fi
+
+restore: |
+    rm -f exec1.out exec2.out exec3.out
+
+execute: |
+    # Check the suite where all the tests pass
+    spread -reuse -resend -json test.json lxd:ubuntu-22.04:checks/suite-2/
+    test 2 -eq $(jq -r '.results."task-passed"' < test.json)
+    test 0 -eq $(jq -r '.results."task-failed"' < test.json)
+    test 0 -eq $(jq -r '.results."task-aborted"' < test.json)
+
+    # Check the suite with different errors
+    spread -reuse -resend -json test.json lxd:ubuntu-22.04:checks/suite-1/task-1-2 || true
+    test 0 -eq $(jq -r '.results."task-passed"' < test.json)
+    test 0 -eq $(jq -r '.results."task-failed"' < test.json)
+    test 1 -eq $(jq -r '.results."task-aborted"' < test.json)
+    test 1 -eq $(jq -r '.results."task-prepare-failed"' < test.json)
+    test 0 -eq $(jq -r '.results."task-restore-failed"' < test.json)
+    test 1 -eq $(jq -r '[.items[] | select( .aborted == true )] | length' test.json)
+
+    spread -reuse -resend -json test.json lxd:ubuntu-22.04:checks/suite-1/task-1-3 || true
+    test 1 -eq $(jq -r '.results."task-passed"' < test.json)
+    test 0 -eq $(jq -r '.results."task-failed"' < test.json)
+    test 0 -eq $(jq -r '.results."task-aborted"' < test.json)
+    test 0 -eq $(jq -r '.results."task-prepare-failed"' < test.json)
+    test 1 -eq $(jq -r '.results."task-restore-failed"' < test.json)
+
+    spread -reuse -resend -json test.json lxd:ubuntu-22.04:checks/suite-1/task-1-4 || true
+    test 0 -eq $(jq -r '.results."task-passed"' < test.json)
+    test 1 -eq $(jq -r '.results."task-failed"' < test.json)
+    test 0 -eq $(jq -r '.results."task-aborted"' < test.json)
+    test 0 -eq $(jq -r '.results."task-prepare-failed"' < test.json)
+    test 0 -eq $(jq -r '.results."task-restore-failed"' < test.json)
+
+    spread -reuse -resend -json test.json lxd:ubuntu-22.04:checks/suite-1/task-1-5 || true
+    test 0 -eq $(jq -r '.results."task-passed"' < test.json)
+    test 1 -eq $(jq -r '.results."task-failed"' < test.json)
+    test 0 -eq $(jq -r '.results."task-aborted"' < test.json)
+    test 0 -eq $(jq -r '.results."task-prepare-failed"' < test.json)
+    test 0 -eq $(jq -r '.results."task-restore-failed"' < test.json)
+    test 1 -eq $(jq -r '[.items[] | select( .verb == "executing" and .success==false )] | length' test.json)
+    # Debugging verbs are not recorded in reports
+    test 0 -eq $(jq -r '[.items[] | select( .verb == "debugging" and .success==false )] | length' test.json)
+
+
+    spread -reuse -resend -json test.json lxd:ubuntu-22.04:checks/suite-1/task-1-6 || true
+    test 0 -eq $(jq -r '.results."task-passed"' < test.json)
+    test 1 -eq $(jq -r '.results."task-failed"' < test.json)
+    test 0 -eq $(jq -r '.results."task-aborted"' < test.json)
+    test 0 -eq $(jq -r '.results."task-prepare-failed"' < test.json)
+    test 0 -eq $(jq -r '.results."task-restore-failed"' < test.json)
+    test 1 -eq $(jq -r '[.items[] | select( .verb == "preparing" and .success==true )] | length' test.json)
+    test 1 -eq $(jq -r '[.items[] | select( .verb == "executing" and .success==false )] | length' test.json)
+    test 1 -eq $(jq -r '[.items[] | select( .verb == "restoring" and .success==false )] | length' test.json)
+
+    # Check the suite which fails to prepare
+    spread -reuse -resend -json test.json lxd:ubuntu-22.04:checks/suite-3/ || true
+    test 0 -eq $(jq -r '.results."task-passed"' < test.json)
+    test 0 -eq $(jq -r '.results."task-failed"' < test.json)
+    test 2 -eq $(jq -r '.results."task-aborted"' < test.json)
+    test 0 -eq $(jq -r '.results."task-prepare-failed"' < test.json)
+    test 0 -eq $(jq -r '.results."task-restore-failed"' < test.json)
+    test 1 -eq $(jq -r '.results."suite-prepare-failed"' < test.json)
+    test 0 -eq $(jq -r '.results."suite-restore-failed"' < test.json)
+    test 2 -eq $(jq -r '[.items[] | select( .aborted == true )] | length' test.json)
+
+    # Check the suite which fails to prepare
+    spread -reuse -resend -json test.json lxd:ubuntu-22.04:checks/suite-4/ || true
+    test 0 -eq $(jq -r '.results."task-passed"' < test.json)
+    test 0 -eq $(jq -r '.results."task-failed"' < test.json)
+    test 0 -eq $(jq -r '.results."task-aborted"' < test.json)
+    test 0 -eq $(jq -r '.results."task-prepare-failed"' < test.json)
+    test 0 -eq $(jq -r '.results."task-restore-failed"' < test.json)
+    test 0 -eq $(jq -r '.results."suite-prepare-failed"' < test.json)
+    test 1 -eq $(jq -r '.results."suite-restore-failed"' < test.json)
+    test 0 -eq $(jq -r '[.items[] | select( .aborted == true )] | length' test.json)

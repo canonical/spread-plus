@@ -1,0 +1,24 @@
+project: spread
+
+backends:
+    lxd:
+        systems:
+            - ubuntu-22.04
+
+path: /home/test
+
+suites:
+    checks/suite-1/: 
+        summary: First test pass the rest fail in different steps
+    checks/suite-2/: 
+        summary: All test pass
+    checks/suite-3/: 
+        summary: Fails to prepare
+        prepare: |
+          exit 1
+    checks/suite-4/: 
+        summary: Fails to restore
+        restore: |
+          exit 1
+
+# vim:ts=4:sw=4:et
