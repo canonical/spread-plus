@@ -1,0 +1,15 @@
+summary: restore fails
+
+details: test
+
+prepare: |
+  exit 0
+
+execute: |
+  exit 0
+
+restore: |
+  exit 1
+
+debug:  |
+  exit 0

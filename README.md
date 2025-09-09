@@ -35,6 +35,7 @@ Spread
 [Repacking and delta uploads](#repacking)  
 [Live output](#live)
 [Performance output](#performance)    
+[Json output](#json) 
 
 <a name="why"/>
 
@@ -1469,3 +1470,11 @@ Additionally, the output can be saved as a log file by including the `-logs` par
 
 This functionality is particularly useful for tracking execution timings and gaining insight into the behavior
 and performance of individual tasks.
+
+<a name="json"/>
+
+## Json output
+
+Spread generates a detailed JSON output for each execution, listing the prepare, execute, and restore tasks along with their results. The JSON also includes a results section summarizing the number of succeeded, failed, aborted, and total tasks. When the `-json <filename>` parameter is used, Spread creates this JSON report after the execution completes.
+
+The report records the start and end times for each task, but it does not include detailed information about failures.

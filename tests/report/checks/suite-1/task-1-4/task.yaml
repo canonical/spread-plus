@@ -1,0 +1,15 @@
+summary: execution fails
+
+details: test
+
+prepare: |
+  exit 0
+
+execute: |
+  exit 1
+
+restore: |
+  exit 0
+
+debug:  |
+  exit 0

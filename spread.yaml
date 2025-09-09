@@ -59,7 +59,7 @@ suites:
         summary: Integration tests
 
 prepare: |
-    DEBS="git qemu-kvm tree"
+    DEBS="jq git qemu-kvm tree"
     if ! dpkg -l $DEBS; then
         apt update
         apt install -y $DEBS
