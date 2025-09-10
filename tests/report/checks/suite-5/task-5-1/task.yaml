@@ -1,0 +1,19 @@
+summary: test with variant
+
+details: test
+
+environment:
+  TEST/one: 1
+  TEST/two: 2
+
+prepare: |
+  exit 0
+
+execute: |
+  exit 0
+
+restore: |
+  exit 0 
+
+debug:  |
+  exit 0

@@ -497,7 +497,7 @@ func (r *Runner) run(client *Client, job *Job, verb string, context interface{},
 	} else {
 		printft(start, startTime, "%s %s (%s)...", strings.Title(verb), contextStr, server.Label())
 	}
-	reportItem := r.report.addItem(verb, job.Backend.Name, job.System.Name, job.Suite.Name, job.Task.Name, job.Variant, server.Label())
+	reportItem := r.report.addItem(verb, job.Backend.Name, job.System.Name, contextStr, job.Suite.Name, job.Task.Name, job.Variant, server.Label())
 	var dir string
 	if context == job.Backend || context == job.Project {
 		dir = r.project.RemotePath
@@ -1163,7 +1163,7 @@ func (r *Runner) completeReport() error {
 
 		// Add aborted tasks to the report
 		for _, job := range r.stats.TaskAbort {
-			r.report.addAbortedTask(job.Backend.Name, job.System.Name, job.Suite.Name, job.Task.Name, job.Variant)
+			r.report.addAbortedTask(job.Backend.Name, job.System.Name, job.Task.Name, job.Variant)
 		}
 
 		// Add results to the report
