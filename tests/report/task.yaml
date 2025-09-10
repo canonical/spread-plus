@@ -107,7 +107,7 @@ execute: |
     test 2 -eq $(jq -r '[.items[] | select( .level == "project" )] | length' test.json)
     test 2 -eq $(jq -r '[.items[] | select( .level == "project" and .variant == "" )] | length' test.json)
     # Prepare and restore suite
-    test 2 -eq $(jq -r '[.items[] | select( .level == "suite" and .name == "checks/suite-6/" )] | length' test.json)
+    test 2 -eq $(jq -r '[.items[] | select( .level == "suite" and .name == "checks/suite-5/" )] | length' test.json)
     test 2 -eq $(jq -r '[.items[] | select( .level == "suite" and .variant == "" )] | length' test.json)
     # Execute tests
     test 1 -eq $(jq -r '[.items[] | select( .level == "task" and .verb == "executing" and .variant == "one" )] | length' test.json)
