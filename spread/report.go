@@ -1,6 +1,7 @@
 package spread
 
 import (
+	"strings"
 	"time"
 )
 
@@ -19,8 +20,8 @@ type Item struct {
 	Verb     string `json:"verb,attr"`
 	Backend  string `json:"backend,attr"`
 	System   string `json:"system,attr"`
-	Suite    string `json:"suite,attr"`
-	Task     string `json:"task,attr"`
+	Level    string `json:"level,attr"`
+	Name     string `json:"name,attr"`
 	Variant  string `json:"variant,attr"`
 	Instance string `json:"instance,attr"`
 	Success  bool   `json:"success,attr"`
@@ -48,15 +49,26 @@ func NewReport() *Report {
 	}
 }
 
-func (r *Report) addItem(verb string, backend string, system string, suite string, task string, variant string, instance string) *Item {
+func (r *Report) addItem(verb string, backend string, system string, context string, suite string, task string, variant string, instance string) *Item {
+	level := "task"
+	name := task
+	if strings.HasSuffix(context, "/") {
+		level = "suite"
+		name = suite
+		variant = ""
+	} else if strings.HasSuffix(context, system) {
+		level = "project"
+		name = ""
+		variant = ""
+	}
 	item := &Item{
 		Start:    time.Now().Format(TIME_FORMAT),
 		End:      "",
 		Verb:     verb,
 		Backend:  backend,
 		System:   system,
-		Suite:    suite,
-		Task:     task,
+		Level:    level,
+		Name:     name,
 		Variant:  variant,
 		Instance: instance,
 		Success:  true,
@@ -66,15 +78,14 @@ func (r *Report) addItem(verb string, backend string, system string, suite strin
 	return item
 }
 
-func (r *Report) addAbortedTask(backend string, system string, suite string, task string, variant string) *Item {
+func (r *Report) addAbortedTask(backend string, system string, task string, variant string) *Item {
 	item := &Item{
 		Start:    "",
 		End:      "",
 		Verb:     "",
 		Backend:  backend,
 		System:   system,
-		Suite:    suite,
-		Task:     task,
+		Name:     task,
 		Variant:  variant,
 		Instance: "",
 		Success:  false,

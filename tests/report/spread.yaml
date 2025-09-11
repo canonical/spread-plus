@@ -7,6 +7,9 @@ backends:
 
 path: /home/test
 
+prepare: true
+restore: true
+
 suites:
     checks/suite-1/: 
         summary: First test pass the rest fail in different steps
@@ -20,5 +23,7 @@ suites:
         summary: Fails to restore
         restore: |
           exit 1
-
-# vim:ts=4:sw=4:et
+    checks/suite-5/: 
+        summary: With variants
+        prepare: true
+        restore: true

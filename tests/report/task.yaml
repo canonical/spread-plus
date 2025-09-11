@@ -15,6 +15,8 @@ execute: |
     test 2 -eq $(jq -r '.results."task-passed"' < test.json)
     test 0 -eq $(jq -r '.results."task-failed"' < test.json)
     test 0 -eq $(jq -r '.results."task-aborted"' < test.json)
+    # No suite prepare and restore tasks
+    test 0 -eq $(jq -r '[.items[] | select( .level == "suite" )] | length' test.json)
 
     # Check the suite with different errors
 
@@ -61,9 +63,13 @@ execute: |
     test 0 -eq $(jq -r '.results."task-aborted"' < test.json)
     test 0 -eq $(jq -r '.results."task-prepare-failed"' < test.json)
     test 1 -eq $(jq -r '.results."task-restore-failed"' < test.json)
-    test 1 -eq $(jq -r '[.items[] | select( .verb == "preparing" and .success==true )] | length' test.json)
+    test 1 -eq $(jq -r '[.items[] | select( .verb == "preparing" and .level == "task" and .success==true )] | length' test.json)
+    test 0 -eq $(jq -r '[.items[] | select( .verb == "preparing" and .level == "suite" and .success==true )] | length' test.json)
+    test 1 -eq $(jq -r '[.items[] | select( .verb == "preparing" and .level == "project" and .success==true )] | length' test.json)
     test 1 -eq $(jq -r '[.items[] | select( .verb == "executing" and .success==false )] | length' test.json)
-    test 1 -eq $(jq -r '[.items[] | select( .verb == "restoring" and .success==false )] | length' test.json)
+    test 1 -eq $(jq -r '[.items[] | select( .verb == "restoring" and .level == "task" and .success==false )] | length' test.json)
+    test 0 -eq $(jq -r '[.items[] | select( .verb == "restoring" and .level == "suite" )] | length' test.json)
+    test 1 -eq $(jq -r '[.items[] | select( .verb == "restoring" and .level == "project" and .success==true )] | length' test.json)
 
     # Check the suite which fails to prepare
     spread -reuse -resend -json test.json lxd:ubuntu-22.04:checks/suite-3/ || true
@@ -86,3 +92,23 @@ execute: |
     test 0 -eq $(jq -r '.results."suite-prepare-failed"' < test.json)
     test 1 -eq $(jq -r '.results."suite-restore-failed"' < test.json)
     test 0 -eq $(jq -r '[.items[] | select( .aborted == true )] | length' test.json)
+
+    # Check the test with variant
+    spread -reuse -resend -json test.json lxd:ubuntu-22.04:checks/suite-5/ || true
+    test 2 -eq $(jq -r '.results."task-passed"' < test.json)
+    test 0 -eq $(jq -r '.results."task-failed"' < test.json)
+    test 0 -eq $(jq -r '.results."task-aborted"' < test.json)
+    test 0 -eq $(jq -r '.results."task-prepare-failed"' < test.json)
+    test 0 -eq $(jq -r '.results."task-restore-failed"' < test.json)
+    test 0 -eq $(jq -r '.results."suite-prepare-failed"' < test.json)
+    test 0 -eq $(jq -r '.results."suite-restore-failed"' < test.json)
+    test 0 -eq $(jq -r '[.items[] | select( .aborted == true )] | length' test.json)
+    # Prepare and restore project
+    test 2 -eq $(jq -r '[.items[] | select( .level == "project" )] | length' test.json)
+    test 2 -eq $(jq -r '[.items[] | select( .level == "project" and .variant == "" )] | length' test.json)
+    # Prepare and restore suite
+    test 2 -eq $(jq -r '[.items[] | select( .level == "suite" and .name == "checks/suite-5/" )] | length' test.json)
+    test 2 -eq $(jq -r '[.items[] | select( .level == "suite" and .variant == "" )] | length' test.json)
+    # Execute tests
+    test 1 -eq $(jq -r '[.items[] | select( .level == "task" and .verb == "executing" and .variant == "one" )] | length' test.json)
+    test 1 -eq $(jq -r '[.items[] | select( .level == "task" and .verb == "executing" and.variant == "two" )] | length' test.json)
