@@ -710,6 +710,12 @@ func (p *openstackProvider) createMachine(ctx context.Context, system *System) (
 		"password": p.options.Password,
 	}
 
+	// halt-timeout is added to the server to determine the time when it
+	// has to be garbage collected
+	if p.backend.HaltTimeout.Duration != 0 {
+		tags["halt-timeout"] = p.backend.HaltTimeout.Duration.String()
+	}
+
 	opts := nova.RunServerOpts{
 		Name:        name,
 		ImageId:     image.Id,
