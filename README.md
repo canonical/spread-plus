@@ -1,5 +1,19 @@
-Spread
-======
+Spread Plus
+===========
+
+##  Introduction
+
+Spread Plus is a fork of Spread created to serve as a development and experimentation ground for new ideas, features, and improvements that may later be proposed for inclusion in the upstream Spread project.
+
+While remaining fully compatible with existing Spread configurations, Spread Plus aims to enhance the developer experience in several key areas:
+
+ * Improved debugging capabilities, offering more detailed logs, better traceability, and clearer failure reporting to simplify test analysis and issue resolution.
+
+ * Enhanced CI integration, making it easier to connect Spread with modern continuous integration systems and automate complex testing pipelines.
+
+ * Expanded backend availability, enabling tests to be executed on a wider range of environments and targets, from virtualized systems to containerized and remote backends.
+
+The primary goal of Spread Plus is to make the testing and validation workflow more transparent, reliable, and adaptable — without compromising compatibility with the original Spread framework. In practice, it acts as an innovation branch where new functionality is explored, validated, and refined before being proposed upstream.
 
 ## Convenient full-system test (task) distribution 
 
