@@ -1,0 +1,28 @@
+summary: Test the tasks-limit variable
+
+prepare: |
+    if [ ! -f .spread-reuse.yaml ]; then
+        touch /run/spread-reuse.yaml
+        ln -s /run/spread-reuse.yaml .spread-reuse.yaml
+    fi
+
+restore: |
+    rm -f exec1.out exec2.out exec3.out
+
+execute: |
+    # Try to run more tasks than the tasks-limit
+    spread -reuse -resend lxd:ubuntu-22.04:checks/task-b lxd:ubuntu-22.04:checks/task-c lxd:ubuntu-22.04:checks/task-a &> exec1.out || true
+    MATCH 'error: The number of jobs \(3\) is greater then the tasks limit set \(2\)' < exec1.out
+
+    # Try to run all the tasks
+    spread -reuse -resend &> exec2.out || true
+    MATCH 'error: The number of jobs \(5\) is greater then the tasks limit set \(2\)' < exec2.out
+
+    # Try to run the same number of tasks than the tasks-limit 
+    spread -reuse -resend lxd:ubuntu-22.04:checks/task-b lxd:ubuntu-22.04:checks/task-c &> exec3.out
+    MATCH 'Successful tasks: 2' < exec3.out
+
+debug: |
+    cat exec1.out || true
+    cat exec2.out || true
+    cat exec3.out || true
