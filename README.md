@@ -738,6 +738,11 @@ at least one of them:
 The `-list` option is useful to see what jobs would be selected by a given
 filter without actually running them.
 
+It is possible to define a limit on the number of tasks executed in a single run.
+This feature was added to prevent unintentional executions that trigger all possible
+combinations of backends, systems, and tasks — for example, when Spread is run without
+any parameters. The limit can be configured using the `tasks-limit` variable, which is
+defined at the project level in the spread.yaml file.
 
 <a name="manual"/>
 

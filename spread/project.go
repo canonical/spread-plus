@@ -45,6 +45,8 @@ type Project struct {
 
 	WarnTimeout Timeout `yaml:"warn-timeout"`
 	KillTimeout Timeout `yaml:"kill-timeout"`
+
+	TasksLimit int `yaml:"tasks-limit"`
 }
 
 func (p *Project) String() string { return "project" }
@@ -949,6 +951,10 @@ func (p *Project) Jobs(options *Options) ([]*Job, error) {
 		return nil, fmt.Errorf("remote project path must be absolute and not /: %s", p.RemotePath)
 	}
 
+	if p.TasksLimit < 0 {
+		return nil, fmt.Errorf("tasks limit cannot be lower than 0")
+	}
+
 	// In case the number of workers set in the options is bigger than 0,
 	// update all the systems with the numbers set in the options
 	if options.Workers > 0 {
@@ -1163,6 +1169,10 @@ func (p *Project) Jobs(options *Options) ([]*Job, error) {
 		} else {
 			return nil, fmt.Errorf("cannot find any tasks")
 		}
+	}
+
+	if p.TasksLimit > 0 && len(jobs) > p.TasksLimit {
+		return nil, fmt.Errorf("The number of jobs (%d) is greater then the tasks limit set (%d)", len(jobs), p.TasksLimit)
 	}
 
 	sort.Sort(jobsByName(jobs))
