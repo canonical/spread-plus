@@ -11,6 +11,9 @@ environment:
     exec/T4: false
 
 skip: |
+    if false; then
+      SKIP "This is not executed"
+    fi
     if [ "$skip" = "true" ]; then
       SKIP "This is the skip reason for variant $SPREAD_VARIANT"
     fi

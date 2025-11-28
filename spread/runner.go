@@ -539,6 +539,7 @@ func (r *Runner) run(client *Client, job *Job, verb string, context interface{},
 		serr, ok := err.(*skipMessage)
 		if ok && verb == checking {
 			printft(start, startTime, "%s %s (%s) : %v", cases.Title(language.Und).String(skipping), contextStr, server.Label(), serr)
+			reportItem.addStatus(true)
 			return false
 		}
 
@@ -729,7 +730,7 @@ func (r *Runner) worker(backend *Backend, system *System, order []int) {
 
 		debug := job.Debug()
 		// We check if the test should be skipped
-		if job.Task.Skip == "" || !r.run(client, job, checking, job, job.Task.Skip, debug, &abend) {
+		if job.Task.Skip == "" || r.run(client, job, checking, job, job.Task.Skip, debug, &abend) {
 			for repeat := r.options.Repeat; repeat >= 0; repeat-- {
 				if r.options.Restore {
 					// Do not prepare or execute, and don't repeat.

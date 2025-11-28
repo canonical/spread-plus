@@ -439,8 +439,7 @@ This is an example to show how to define a skip command for a task:
 ```
 summary: Skip condition example
 skip:
-    check: |
-        [ -d /path/to/dir ] && SKIP <REASON>
+    [ -d /path/to/dir ] && SKIP <REASON>
 execute: |
     echo "This is an example"
 ```
