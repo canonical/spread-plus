@@ -71,6 +71,14 @@ execute: |
     test 0 -eq $(jq -r '[.items[] | select( .verb == "restoring" and .level == "suite" )] | length' test.json)
     test 1 -eq $(jq -r '[.items[] | select( .verb == "restoring" and .level == "project" and .success==true )] | length' test.json)
 
+    # execution is skipped
+    spread -reuse -resend -json test.json lxd:ubuntu-22.04:checks/suite-1/task-1-7
+    test 0 -eq $(jq -r '.results."task-passed"' < test.json)
+    test 0 -eq $(jq -r '.results."task-failed"' < test.json)
+    test 0 -eq $(jq -r '.results."task-aborted"' < test.json)
+    test 1 -eq $(jq -r '.results."task-skipped"' < test.json)
+    test 1 -eq $(jq -r '[.items[] | select( .skipped == true )] | length' test.json)
+
     # Check the suite which fails to prepare
     spread -reuse -resend -json test.json lxd:ubuntu-22.04:checks/suite-3/ || true
     test 0 -eq $(jq -r '.results."task-passed"' < test.json)
@@ -81,6 +89,7 @@ execute: |
     test 1 -eq $(jq -r '.results."suite-prepare-failed"' < test.json)
     test 0 -eq $(jq -r '.results."suite-restore-failed"' < test.json)
     test 2 -eq $(jq -r '[.items[] | select( .aborted == true )] | length' test.json)
+    test 0 -eq $(jq -r '[.items[] | select( .skipped == true )] | length' test.json)
 
     # Check the suite which fails to restore
     spread -reuse -resend -json test.json lxd:ubuntu-22.04:checks/suite-4/ || true

@@ -26,6 +26,7 @@ The primary goal of Spread Plus is to make the testing and validation workflow m
 [Blacklisting and whitelisting](#blacklisting)  
 [Preparing and restoring](#preparing)  
 [Functions](#functions)  
+[Skip condition](#skip-condition)  
 [Rebooting](#rebooting)  
 [Timeouts](#timeouts)  
 [Fast iterations with reuse](#reuse)  
@@ -423,6 +424,35 @@ scripts may also be defined in the same places. These are only run when other
 scripts fail, and their purpose is to display further information which might
 be helpful when trying to understand what went wrong.
 
+<a name="skip-condition"/>
+
+## Skip condition
+
+A skip condition determines whether a task should be skipped before it begins execution.
+
+Skip conditions can only be defined at the task level. They are evaluated before the task preparation phase.
+If the skip condition evaluates to true, the task is completely skipped — including the prepare, execute, and restore phases.
+
+Each skip condition must include:
+
+ * reason: A human-readable message explaining why the task was skipped.
+This message appears in the task results.
+
+ * check: A shell expression (or set of expressions) evaluated to decide whether the task should be skipped.
+If the check returns a successful status (0), the task is skipped.
+
+This is an example to show how to define a skip condition for a task:
+
+```
+summary: Skip condition example
+skip:
+    reason: This is the skip reason
+    check: |
+        [ -d /path/to/dir ]
+        [ -f /path/to/file ]
+execute: |
+    echo "This is an example"
+```
 
 <a name="functions"/>
 

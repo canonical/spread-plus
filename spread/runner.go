@@ -19,6 +19,8 @@ import (
 	"math"
 	"math/rand"
 
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 	"gopkg.in/tomb.v2"
 )
 
@@ -475,6 +477,8 @@ const (
 	preparing = "preparing"
 	executing = "executing"
 	restoring = "restoring"
+	checking  = "checking"
+	skipping  = "skipping"
 )
 
 func (r *Runner) run(client *Client, job *Job, verb string, context interface{}, script, debug string, abend *bool) bool {
@@ -492,10 +496,10 @@ func (r *Runner) run(client *Client, job *Job, verb string, context interface{},
 		r.sequence[job] = r.last + 1
 		r.last = r.last + 1
 
-		printft(start, startTime, "%s %s (%s) (%d/%d)...", strings.Title(verb), contextStr, server.Label(), r.sequence[job], len(r.pending))
+		printft(start, startTime, "%s %s (%s) (%d/%d)...", cases.Title(language.Und).String(verb), contextStr, server.Label(), r.sequence[job], len(r.pending))
 		r.mu.Unlock()
 	} else {
-		printft(start, startTime, "%s %s (%s)...", strings.Title(verb), contextStr, server.Label())
+		printft(start, startTime, "%s %s (%s)...", cases.Title(language.Und).String(verb), contextStr, server.Label())
 	}
 	reportItem := r.report.addItem(verb, job.Backend.Name, job.System.Name, contextStr, job.Suite.Name, job.Task.Name, job.Variant, server.Label())
 	var dir string
@@ -530,6 +534,16 @@ func (r *Runner) run(client *Client, job *Job, verb string, context interface{},
 	reportItem.addStatus(err == nil)
 
 	printft(start, endTime, "")
+
+	if verb == checking {
+		if err != nil {
+			return false
+		} else {
+			printft(start, startTime, "%s %s (%s)...", cases.Title(language.Und).String(skipping), contextStr, server.Label())
+			return true
+		}
+	}
+
 	if err != nil {
 		// Use a different time so it has a different id on Travis, but keep
 		// the original start time so the error message shows the task time.
@@ -717,33 +731,37 @@ func (r *Runner) worker(backend *Backend, system *System, order []int) {
 		}
 
 		debug := job.Debug()
-		for repeat := r.options.Repeat; repeat >= 0; repeat-- {
-			if r.options.Restore {
-				// Do not prepare or execute, and don't repeat.
-				repeat = -1
-			} else if !r.options.Restore && !r.run(client, job, preparing, job, job.Prepare(), debug, &abend) {
-				r.add(&stats.TaskPrepareError, job)
-				r.add(&stats.TaskAbort, job)
-				debug = ""
-				repeat = -1
-			} else if !r.options.Restore && r.run(client, job, executing, job, job.Task.Execute, debug, &abend) {
-				r.add(&stats.TaskDone, job)
-			} else if !r.options.Restore {
-				r.add(&stats.TaskError, job)
-				debug = ""
-				repeat = -1
-			}
-			if !abend && !r.options.Restore && repeat <= 0 {
-				if err := r.fetchJobArtifacts(client, job); err != nil {
-					printf("Cannot fetch artifacts of %s: %v", job, err)
-					r.tomb.Killf("cannot fetch artifacts of %s: %v", job, err)
+		if job.Task.Skip.Check == "" || !r.run(client, job, checking, job, job.Task.Skip.Check, debug, &abend) {
+			for repeat := r.options.Repeat; repeat >= 0; repeat-- {
+				if r.options.Restore {
+					// Do not prepare or execute, and don't repeat.
+					repeat = -1
+				} else if !r.options.Restore && !r.run(client, job, preparing, job, job.Prepare(), debug, &abend) {
+					r.add(&stats.TaskPrepareError, job)
+					r.add(&stats.TaskAbort, job)
+					debug = ""
+					repeat = -1
+				} else if !r.options.Restore && r.run(client, job, executing, job, job.Task.Execute, debug, &abend) {
+					r.add(&stats.TaskDone, job)
+				} else if !r.options.Restore {
+					r.add(&stats.TaskError, job)
+					debug = ""
+					repeat = -1
+				}
+				if !abend && !r.options.Restore && repeat <= 0 {
+					if err := r.fetchJobArtifacts(client, job); err != nil {
+						printf("Cannot fetch artifacts of %s: %v", job, err)
+						r.tomb.Killf("cannot fetch artifacts of %s: %v", job, err)
+					}
+				}
+				if !abend && !r.run(client, job, restoring, job, job.Restore(), debug, &abend) {
+					r.add(&stats.TaskRestoreError, job)
+					badProject = true
+					repeat = -1
 				}
 			}
-			if !abend && !r.run(client, job, restoring, job, job.Restore(), debug, &abend) {
-				r.add(&stats.TaskRestoreError, job)
-				badProject = true
-				repeat = -1
-			}
+		} else {
+			r.add(&stats.TaskSkipped, job)
 		}
 	}
 
@@ -1161,13 +1179,18 @@ func (r *Runner) completeReport() error {
 	if len(r.options.Json) > 0 {
 		filename := r.options.Json
 
+		// Add skipped tasks to the report
+		for _, job := range r.stats.TaskSkipped {
+			r.report.addSkippedTask(job.Backend.Name, job.System.Name, job.Task.Name, job.Variant)
+		}
+
 		// Add aborted tasks to the report
 		for _, job := range r.stats.TaskAbort {
 			r.report.addAbortedTask(job.Backend.Name, job.System.Name, job.Task.Name, job.Variant)
 		}
 
 		// Add results to the report
-		r.report.addTaskResults(len(r.stats.TaskDone), len(r.stats.TaskError), len(r.stats.TaskAbort), len(r.stats.TaskPrepareError), len(r.stats.TaskRestoreError))
+		r.report.addTaskResults(len(r.stats.TaskDone), len(r.stats.TaskError), len(r.stats.TaskAbort), len(r.stats.TaskSkipped), len(r.stats.TaskPrepareError), len(r.stats.TaskRestoreError))
 		r.report.addSuiteResults(len(r.stats.SuitePrepareError), len(r.stats.SuiteRestoreError))
 		r.report.addBackendResults(len(r.stats.BackendPrepareError), len(r.stats.BackendRestoreError))
 		r.report.addProjectResults(len(r.stats.ProjectPrepareError), len(r.stats.ProjectRestoreError))
@@ -1188,6 +1211,7 @@ type stats struct {
 	TaskDone            []*Job
 	TaskError           []*Job
 	TaskAbort           []*Job
+	TaskSkipped         []*Job
 	TaskPrepareError    []*Job
 	TaskRestoreError    []*Job
 	SuitePrepareError   []*Job
@@ -1221,6 +1245,7 @@ func (s *stats) log() {
 	printf("Successful tasks: %d", len(s.TaskDone))
 	printf("Aborted tasks: %d", len(s.TaskAbort))
 
+	logNames(printf, "Skipped tasks", s.TaskSkipped, skipReason)
 	logNames(printf, "Failed tasks", s.TaskError, taskName)
 	logNames(printf, "Failed task prepare", s.TaskPrepareError, taskName)
 	logNames(printf, "Failed task restore", s.TaskRestoreError, taskName)
@@ -1241,6 +1266,10 @@ func taskName(job *Job) string {
 		return job.Task.Name
 	}
 	return job.Task.Name + ":" + job.Variant
+}
+
+func skipReason(job *Job) string {
+	return taskName(job) + " - " + job.Task.Skip.Reason
 }
 
 func logNames(f func(format string, args ...interface{}), prefix string, jobs []*Job, name func(job *Job) string) {

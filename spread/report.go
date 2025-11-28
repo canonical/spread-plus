@@ -26,12 +26,14 @@ type Item struct {
 	Instance string `json:"instance,attr"`
 	Success  bool   `json:"success,attr"`
 	Aborted  bool   `json:"aborted,attr"`
+	Skipped  bool   `json:"skipped,attr"`
 }
 
 type Results struct {
 	TaskPassed           int `json:"task-passed,attr"`
 	TaskFailed           int `json:"task-failed,attr"`
 	TaskAborted          int `json:"task-aborted,attr"`
+	TaskSkipped          int `json:"task-skipped,attr"`
 	TaskPrepareFailed    int `json:"task-prepare-failed,attr"`
 	TaskRestoreFailed    int `json:"task-restore-failed,attr"`
 	SuitePrepareFailed   int `json:"suite-prepare-failed,attr"`
@@ -73,6 +75,25 @@ func (r *Report) addItem(verb string, backend string, system string, context str
 		Instance: instance,
 		Success:  true,
 		Aborted:  false,
+		Skipped:  false,
+	}
+	r.ExecutionItems = append(r.ExecutionItems, item)
+	return item
+}
+
+func (r *Report) addSkippedTask(backend string, system string, task string, variant string) *Item {
+	item := &Item{
+		Start:    "",
+		End:      "",
+		Verb:     "",
+		Backend:  backend,
+		System:   system,
+		Name:     task,
+		Variant:  variant,
+		Instance: "",
+		Success:  false,
+		Aborted:  false,
+		Skipped:  true,
 	}
 	r.ExecutionItems = append(r.ExecutionItems, item)
 	return item
@@ -90,15 +111,17 @@ func (r *Report) addAbortedTask(backend string, system string, task string, vari
 		Instance: "",
 		Success:  false,
 		Aborted:  true,
+		Skipped:  false,
 	}
 	r.ExecutionItems = append(r.ExecutionItems, item)
 	return item
 }
 
-func (r *Report) addTaskResults(passed int, failed int, aborted int, prepareFailed int, restoreFailed int) {
+func (r *Report) addTaskResults(passed int, failed int, aborted int, skipped int, prepareFailed int, restoreFailed int) {
 	r.ExecutionResults.TaskPassed = passed
 	r.ExecutionResults.TaskFailed = failed
 	r.ExecutionResults.TaskAborted = aborted
+	r.ExecutionResults.TaskSkipped = skipped
 	r.ExecutionResults.TaskPrepareFailed = prepareFailed
 	r.ExecutionResults.TaskRestoreFailed = restoreFailed
 }

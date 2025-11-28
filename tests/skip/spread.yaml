@@ -1,0 +1,14 @@
+project: spread
+
+backends:
+    lxd:
+        systems:
+            - ubuntu-22.04
+
+path: /home/test
+
+suites:
+    checks/:
+        summary: Verification tasks.
+        environment: 
+            MY_TEST_VAR: '$(HOST: echo "${MY_TEST_VAR:-}")'
