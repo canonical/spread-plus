@@ -10,10 +10,10 @@ environment:
     skip/T4: true
     exec/T4: false
 
-skip:
-  reason: This is the skip reason "$SPREAD_VARIANT"
-  check: |
-    [ "$skip" = "true" ]
+skip: |
+    if [ "$skip" = "true" ]; then
+      SKIP "This is the skip reason for variant $SPREAD_VARIANT"
+    fi
 
 execute: |
     [ "$exec" = "true" ]

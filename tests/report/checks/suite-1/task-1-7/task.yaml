@@ -2,10 +2,8 @@ summary: task is skipped
 
 details: test
 
-skip:
-  reason: This task is skipped
-  check: |
-    exit 0
+skip: |
+  SKIP "task is skipped"
 
 prepare: |
   exit 1

@@ -1,0 +1,4 @@
+summary: Ensure skip condition works.
+
+execute: |
+    SKIP "skipping execute"

@@ -8,13 +8,19 @@ prepare: |
 
 execute: |
     # Check when the skip condition matches (the test execution fails)
-    spread -reuse -resend &> task1.out || true
+    spread -reuse -resend &> task1.out lxd:ubuntu-22.04:checks/specific-reason || true
     grep 'Successful tasks: 1' task1.out
     grep 'Failed tasks: 1' task1.out
     grep 'Skipped tasks: 2' task1.out
     grep 'Skipping' task1.out
-    grep 'main:T1 - This is the skip reason' task1.out
-    grep 'main:T4 - This is the skip reason' task1.out
+    grep 'specific-reason:T1' task1.out
+    grep 'specific-reason:T4' task1.out
+
+    spread -reuse -resend &> task2.out lxd:ubuntu-22.04:checks/skip-execute || true
+    grep 'Successful tasks: 0' task2.out
+    grep 'Failed tasks: 1' task2.out
+    ! grep 'Skipping' task2.out
 
 debug: |
     cat task1.out || true
+    cat task2.out || true

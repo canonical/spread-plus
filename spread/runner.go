@@ -534,17 +534,14 @@ func (r *Runner) run(client *Client, job *Job, verb string, context interface{},
 	reportItem.addStatus(err == nil)
 
 	printft(start, endTime, "")
-
-	if verb == checking {
-		if err != nil {
-			return false
-		} else {
-			printft(start, startTime, "%s %s (%s)...", cases.Title(language.Und).String(skipping), contextStr, server.Label())
-			return true
-		}
-	}
-
 	if err != nil {
+		// Check if the error is a skip message
+		serr, ok := err.(*skipMessage)
+		if ok && verb == checking {
+			printft(start, startTime, "%s %s (%s) : %v", cases.Title(language.Und).String(skipping), contextStr, server.Label(), serr)
+			return false
+		}
+
 		// Use a different time so it has a different id on Travis, but keep
 		// the original start time so the error message shows the task time.
 		start = start.Add(1)
@@ -731,7 +728,8 @@ func (r *Runner) worker(backend *Backend, system *System, order []int) {
 		}
 
 		debug := job.Debug()
-		if job.Task.Skip.Check == "" || !r.run(client, job, checking, job, job.Task.Skip.Check, debug, &abend) {
+		// We check if the test should be skipped
+		if job.Task.Skip == "" || !r.run(client, job, checking, job, job.Task.Skip, debug, &abend) {
 			for repeat := r.options.Repeat; repeat >= 0; repeat-- {
 				if r.options.Restore {
 					// Do not prepare or execute, and don't repeat.
@@ -1245,7 +1243,7 @@ func (s *stats) log() {
 	printf("Successful tasks: %d", len(s.TaskDone))
 	printf("Aborted tasks: %d", len(s.TaskAbort))
 
-	logNames(printf, "Skipped tasks", s.TaskSkipped, skipReason)
+	logNames(printf, "Skipped tasks", s.TaskSkipped, taskName)
 	logNames(printf, "Failed tasks", s.TaskError, taskName)
 	logNames(printf, "Failed task prepare", s.TaskPrepareError, taskName)
 	logNames(printf, "Failed task restore", s.TaskRestoreError, taskName)
@@ -1266,10 +1264,6 @@ func taskName(job *Job) string {
 		return job.Task.Name
 	}
 	return job.Task.Name + ":" + job.Variant
-}
-
-func skipReason(job *Job) string {
-	return taskName(job) + " - " + job.Task.Skip.Reason
 }
 
 func logNames(f func(format string, args ...interface{}), prefix string, jobs []*Job, name func(job *Job) string) {

@@ -328,7 +328,13 @@ type rebootError struct {
 	Key string
 }
 
+type skipMessage struct {
+	Key string
+}
+
 func (e *rebootError) Error() string { return "reboot requested" }
+
+func (e *skipMessage) Error() string { return e.Key }
 
 const maxReboots = 10
 
@@ -420,6 +426,7 @@ func (c *Client) runPart(script string, dir string, env *Environment, mode outpu
 	}
 	buf.WriteString(rc(false, "REBOOT() { { set +xu; } 2> /dev/null; [ -z \"$1\" ] && echo '<REBOOT>' || echo \"<REBOOT $1>\"; exit 213; }\n"))
 	buf.WriteString(rc(false, "ERROR() { { set +xu; } 2> /dev/null; [ -z \"$1\" ] && echo '<ERROR>' || echo \"<ERROR $@>\"; exit 213; }\n"))
+	buf.WriteString(rc(false, "SKIP() { { set +xu; } 2> /dev/null; [ -z \"$1\" ] && echo '<SKIP>' || echo \"<SKIP $1>\"; exit 213; }\n"))
 	// We are not using pipes here, see:
 	//  https://github.com/snapcore/spread/pull/64
 	// We also run it in a subshell, see
@@ -547,6 +554,9 @@ func (c *Client) runPart(script string, dir string, env *Environment, mode outpu
 		}
 		if len(m) > 0 && string(m[1]) == "REBOOT" {
 			return append(previous, stdout.Bytes()...), &rebootError{string(m[2])}
+		}
+		if len(m) > 0 && string(m[1]) == "SKIP" {
+			return append(previous, stdout.Bytes()...), &skipMessage{string(m[2])}
 		}
 		if mode == liveOutput {
 			return append(previous, stdout.Bytes()...), &rebootError{"Reboot"}

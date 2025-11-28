@@ -340,11 +340,6 @@ func (e *Environment) Replace(oldkey, newkey, value string) {
 	e.vals[newkey] = value
 }
 
-type Skip struct {
-	Reason string
-	Check  string
-}
-
 type Suite struct {
 	Summary  string
 	Systems  []string
@@ -391,6 +386,7 @@ type Task struct {
 	Restore string
 	Execute string
 	Debug   string
+	Skip    string
 
 	Artifacts []string
 
@@ -402,7 +398,6 @@ type Task struct {
 
 	Priority OptionalInt
 	Manual   bool
-	Skip     Skip
 }
 
 func (t *Task) String() string { return t.Name }
@@ -728,8 +723,7 @@ func Load(path string) (*Project, error) {
 			task.Prepare = strings.TrimSpace(task.Prepare)
 			task.Restore = strings.TrimSpace(task.Restore)
 			task.Debug = strings.TrimSpace(task.Debug)
-			task.Skip.Reason = strings.TrimSpace(task.Skip.Reason)
-			task.Skip.Check = strings.TrimSpace(task.Skip.Check)
+			task.Skip = strings.TrimSpace(task.Skip)
 			if !validTask.MatchString(task.Name) {
 				return nil, fmt.Errorf("invalid task name: %q", task.Name)
 			}
@@ -738,14 +732,6 @@ func Load(path string) (*Project, error) {
 			}
 			if task.Samples == 0 {
 				task.Samples = 1
-			}
-
-			if task.Skip.Check != "" && task.Skip.Reason == "" {
-				return nil, fmt.Errorf("%s is missing the skip reason", task)
-			}
-
-			if task.Skip.Reason != "" && task.Skip.Check == "" {
-				return nil, fmt.Errorf("%s is missing the skip check", task)
 			}
 
 			if err := checkEnv(task, &task.Environment); err != nil {
