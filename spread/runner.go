@@ -536,12 +536,7 @@ func (r *Runner) run(client *Client, job *Job, verb string, context interface{},
 	printft(start, endTime, "")
 
 	if verb == checking {
-		if err != nil {
-			return false
-		} else {
-			printft(start, startTime, "%s %s (%s)...", cases.Title(language.Und).String(skipping), contextStr, server.Label())
-			return true
-		}
+		return err == nil
 	}
 
 	if err != nil {
@@ -731,7 +726,19 @@ func (r *Runner) worker(backend *Backend, system *System, order []int) {
 		}
 
 		debug := job.Debug()
-		if job.Task.Skip.Check == "" || !r.run(client, job, checking, job, job.Task.Skip.Check, debug, &abend) {
+
+		// Check if the task should be skipped
+		skipRun := false
+		for _, skip := range job.Task.If {
+			if r.run(client, job, checking, job, skip.Check, debug, &abend) {
+				printft(time.Now(), startTime|endTime, "Skipping %s: %s", job, skip.Reason)
+				skipRun = true
+				r.add(&stats.TaskSkipped, job)
+				break
+			}
+		}
+
+		if !skipRun {
 			for repeat := r.options.Repeat; repeat >= 0; repeat-- {
 				if r.options.Restore {
 					// Do not prepare or execute, and don't repeat.
@@ -760,8 +767,6 @@ func (r *Runner) worker(backend *Backend, system *System, order []int) {
 					repeat = -1
 				}
 			}
-		} else {
-			r.add(&stats.TaskSkipped, job)
 		}
 	}
 
@@ -1245,7 +1250,7 @@ func (s *stats) log() {
 	printf("Successful tasks: %d", len(s.TaskDone))
 	printf("Aborted tasks: %d", len(s.TaskAbort))
 
-	logNames(printf, "Skipped tasks", s.TaskSkipped, skipReason)
+	logNames(printf, "Skipped tasks", s.TaskSkipped, taskName)
 	logNames(printf, "Failed tasks", s.TaskError, taskName)
 	logNames(printf, "Failed task prepare", s.TaskPrepareError, taskName)
 	logNames(printf, "Failed task restore", s.TaskRestoreError, taskName)
@@ -1266,10 +1271,6 @@ func taskName(job *Job) string {
 		return job.Task.Name
 	}
 	return job.Task.Name + ":" + job.Variant
-}
-
-func skipReason(job *Job) string {
-	return taskName(job) + " - " + job.Task.Skip.Reason
 }
 
 func logNames(f func(format string, args ...interface{}), prefix string, jobs []*Job, name func(job *Job) string) {
