@@ -3,9 +3,9 @@ summary: task is skipped
 details: test
 
 skip:
-  reason: This task is skipped
-  check: |
-    exit 0
+  - reason: This task is skipped
+    if: |
+      exit 0
 
 prepare: |
   exit 1

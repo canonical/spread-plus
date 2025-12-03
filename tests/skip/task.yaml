@@ -20,9 +20,21 @@ execute: |
     spread -reuse -resend lxd:ubuntu-22.04:checks/multi-skip &> task2.out || true
     grep 'Successful tasks: 1' task2.out
     grep 'Skipped tasks: 2' task2.out
-    test "$(grep -c 'Skipping ' task1.out)" = 2
+    test "$(grep -c 'Skipping ' task2.out)" = 2
     grep 'multi-skip:T1 - This is the first skip reason' task2.out
     grep 'multi-skip:T2 - This is the second skip reason' task2.out
+    
+    # Check when the skip condition is set at suite level
+    MY_TEST_VAR=1 spread -reuse -resend lxd:ubuntu-22.04:checks/single-skip &> task3.out || true
+    grep 'Successful tasks: 0' task3.out
+    ! grep 'Skipped tasks' task3.out
+    grep 'Skipped suites: 1' task3.out
+    test "$(grep -c 'Skipping ' task3.out)" = 1
+    grep 'checks/ - Skip all tests for checks suite' task3.out
 
 debug: |
     cat task1.out || true
+    echo
+    cat task2.out || true
+    echo
+    cat task3.out || true

@@ -27,3 +27,8 @@ suites:
         summary: With variants
         prepare: true
         restore: true
+    checks/suite-6/: 
+        summary: Suite skipped
+        skip:
+          - reason: Skip all tests for checks suite
+            if: true

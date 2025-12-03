@@ -36,6 +36,7 @@ type Results struct {
 	TaskSkipped          int `json:"task-skipped,attr"`
 	TaskPrepareFailed    int `json:"task-prepare-failed,attr"`
 	TaskRestoreFailed    int `json:"task-restore-failed,attr"`
+	SuiteSkipped         int `json:"suite-skipped,attr"`
 	SuitePrepareFailed   int `json:"suite-prepare-failed,attr"`
 	SuiteRestoreFailed   int `json:"suite-restore-failed,attr"`
 	BackendPrepareFailed int `json:"backend-prepare-failed,attr"`
@@ -90,6 +91,26 @@ func (r *Report) addSkippedTask(backend string, system string, task string, vari
 		System:   system,
 		Name:     task,
 		Variant:  variant,
+		Level:    "task",
+		Instance: "",
+		Success:  false,
+		Aborted:  false,
+		Skipped:  true,
+	}
+	r.ExecutionItems = append(r.ExecutionItems, item)
+	return item
+}
+
+func (r *Report) addSkippedSuite(backend string, system string, suite string) *Item {
+	item := &Item{
+		Start:    "",
+		End:      "",
+		Verb:     "",
+		Backend:  backend,
+		System:   system,
+		Name:     suite,
+		Level:    "suite",
+		Variant:  "",
 		Instance: "",
 		Success:  false,
 		Aborted:  false,
@@ -108,6 +129,7 @@ func (r *Report) addAbortedTask(backend string, system string, task string, vari
 		System:   system,
 		Name:     task,
 		Variant:  variant,
+		Level:    "task",
 		Instance: "",
 		Success:  false,
 		Aborted:  true,
@@ -126,7 +148,8 @@ func (r *Report) addTaskResults(passed int, failed int, aborted int, skipped int
 	r.ExecutionResults.TaskRestoreFailed = restoreFailed
 }
 
-func (r *Report) addSuiteResults(prepareFailed int, restoreFailed int) {
+func (r *Report) addSuiteResults(prepareFailed int, restoreFailed int, skipped int) {
+	r.ExecutionResults.SuiteSkipped = skipped
 	r.ExecutionResults.SuitePrepareFailed = prepareFailed
 	r.ExecutionResults.SuiteRestoreFailed = restoreFailed
 }

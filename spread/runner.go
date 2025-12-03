@@ -651,6 +651,7 @@ func (r *Runner) worker(backend *Backend, system *System, order []int) {
 	var abend bool
 	var badProject bool
 	var badSuite = make(map[*Suite]bool)
+	var skippedSuite = make(map[*Suite]string)
 
 	var insideProject bool
 	var insideBackend bool
@@ -658,6 +659,7 @@ func (r *Runner) worker(backend *Backend, system *System, order []int) {
 
 	var job, last *Job
 
+outer:
 	for {
 		r.mu.Lock()
 		if job != nil {
@@ -680,6 +682,9 @@ func (r *Runner) worker(backend *Backend, system *System, order []int) {
 
 		if badSuite[job.Suite] {
 			r.add(&stats.TaskAbort, job)
+			continue
+		}
+		if skippedSuite[job.Suite] != "" {
 			continue
 		}
 
@@ -717,6 +722,18 @@ func (r *Runner) worker(backend *Backend, system *System, order []int) {
 
 		if insideSuite != job.Suite {
 			insideSuite = job.Suite
+
+			// Check if the suite should be skipped
+			for _, skip := range job.Suite.Skip {
+				if r.run(client, job, checking, job.Suite, skip.If, job.Suite.Debug, &abend) {
+					job.SkipReason = skip.Reason
+					r.add(&stats.SuiteSkipped, job)
+					skippedSuite[job.Suite] = skip.Reason
+					printft(time.Now(), startTime|endTime, "%s %s (%s)...", cases.Title(language.Und).String(skipping), job, client.server.Label())
+					continue outer
+				}
+			}
+
 			if !r.options.Restore && !r.run(client, job, preparing, job.Suite, job.Suite.Prepare, job.Suite.Debug, &abend) {
 				r.add(&stats.SuitePrepareError, job)
 				r.add(&stats.TaskAbort, job)
@@ -1190,6 +1207,10 @@ func (r *Runner) completeReport() error {
 			r.report.addSkippedTask(job.Backend.Name, job.System.Name, job.Task.Name, job.Variant)
 		}
 
+		for _, job := range r.stats.SuiteSkipped {
+			r.report.addSkippedSuite(job.Backend.Name, job.System.Name, job.Suite.Name)
+		}
+
 		// Add aborted tasks to the report
 		for _, job := range r.stats.TaskAbort {
 			r.report.addAbortedTask(job.Backend.Name, job.System.Name, job.Task.Name, job.Variant)
@@ -1197,7 +1218,7 @@ func (r *Runner) completeReport() error {
 
 		// Add results to the report
 		r.report.addTaskResults(len(r.stats.TaskDone), len(r.stats.TaskError), len(r.stats.TaskAbort), len(r.stats.TaskSkipped), len(r.stats.TaskPrepareError), len(r.stats.TaskRestoreError))
-		r.report.addSuiteResults(len(r.stats.SuitePrepareError), len(r.stats.SuiteRestoreError))
+		r.report.addSuiteResults(len(r.stats.SuitePrepareError), len(r.stats.SuiteRestoreError), len(r.stats.SuiteSkipped))
 		r.report.addBackendResults(len(r.stats.BackendPrepareError), len(r.stats.BackendRestoreError))
 		r.report.addProjectResults(len(r.stats.ProjectPrepareError), len(r.stats.ProjectRestoreError))
 
@@ -1220,6 +1241,7 @@ type stats struct {
 	TaskSkipped         []*Job
 	TaskPrepareError    []*Job
 	TaskRestoreError    []*Job
+	SuiteSkipped        []*Job
 	SuitePrepareError   []*Job
 	SuiteRestoreError   []*Job
 	BackendPrepareError []*Job
@@ -1251,10 +1273,11 @@ func (s *stats) log() {
 	printf("Successful tasks: %d", len(s.TaskDone))
 	printf("Aborted tasks: %d", len(s.TaskAbort))
 
-	logNames(printf, "Skipped tasks", s.TaskSkipped, skipReason)
+	logNames(printf, "Skipped tasks", s.TaskSkipped, taskSkipReason)
 	logNames(printf, "Failed tasks", s.TaskError, taskName)
 	logNames(printf, "Failed task prepare", s.TaskPrepareError, taskName)
 	logNames(printf, "Failed task restore", s.TaskRestoreError, taskName)
+	logNames(printf, "Skipped suites", s.SuiteSkipped, suiteSkipReason)
 	logNames(printf, "Failed suite prepare", s.SuitePrepareError, suiteName)
 	logNames(printf, "Failed suite restore", s.SuiteRestoreError, suiteName)
 	logNames(printf, "Failed backend prepare", s.BackendPrepareError, backendName)
@@ -1274,8 +1297,12 @@ func taskName(job *Job) string {
 	return job.Task.Name + ":" + job.Variant
 }
 
-func skipReason(job *Job) string {
+func taskSkipReason(job *Job) string {
 	return taskName(job) + " - " + job.SkipReason
+}
+
+func suiteSkipReason(job *Job) string {
+	return job.Suite.Name + " - " + job.SkipReason
 }
 
 func logNames(f func(format string, args ...interface{}), prefix string, jobs []*Job, name func(job *Job) string) {

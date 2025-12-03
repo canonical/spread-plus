@@ -371,6 +371,7 @@ type Suite struct {
 
 	Priority OptionalInt
 	Manual   bool
+	Skip     []Skip
 }
 
 func (s *Suite) String() string { return "suite " + s.Name }
@@ -671,6 +672,13 @@ func Load(path string) (*Project, error) {
 		suite.PrepareEach = strings.TrimSpace(suite.PrepareEach)
 		suite.RestoreEach = strings.TrimSpace(suite.RestoreEach)
 		suite.DebugEach = strings.TrimSpace(suite.DebugEach)
+		for _, skip := range suite.Skip {
+			skip.Reason = strings.TrimSpace(skip.Reason)
+			skip.If = strings.TrimSpace(skip.If)
+			if skip.If == "" || skip.Reason == "" {
+				return nil, fmt.Errorf("%s is missing either the if or reason for the skip", suite)
+			}
+		}
 
 		project.Suites[suite.Name] = suite
 
