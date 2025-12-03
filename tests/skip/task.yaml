@@ -12,17 +12,17 @@ execute: |
     grep 'Successful tasks: 1' task1.out
     grep 'Failed tasks: 1' task1.out
     grep 'Skipped tasks: 2' task1.out
-    grep 'Skipping' task1.out
-    grep 'single-skip:T1: This is the skip reason' task1.out
-    grep 'single-skip:T4: This is the skip reason' task1.out
+    test "$(grep -c 'Skipping ' task1.out)" = 2
+    grep 'single-skip:T1 - This is the skip reason' task1.out
+    grep 'single-skip:T4 - This is the skip reason' task1.out
 
     # Check when the skip condition matches with multiple skip conditions
     spread -reuse -resend lxd:ubuntu-22.04:checks/multi-skip &> task2.out || true
     grep 'Successful tasks: 1' task2.out
     grep 'Skipped tasks: 2' task2.out
-    grep 'Skipping' task2.out
-    grep 'multi-skip:T1: This is the first skip reason' task2.out
-    grep 'multi-skip:T2: This is the second skip reason' task2.out
+    test "$(grep -c 'Skipping ' task1.out)" = 2
+    grep 'multi-skip:T1 - This is the first skip reason' task2.out
+    grep 'multi-skip:T2 - This is the second skip reason' task2.out
 
 debug: |
     cat task1.out || true

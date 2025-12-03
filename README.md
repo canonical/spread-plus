@@ -26,7 +26,7 @@ The primary goal of Spread Plus is to make the testing and validation workflow m
 [Blacklisting and whitelisting](#blacklisting)  
 [Preparing and restoring](#preparing)  
 [Functions](#functions)  
-[If condition](#if-condition)  
+[Skipping](#skipping)  
 [Rebooting](#rebooting)  
 [Timeouts](#timeouts)  
 [Fast iterations with reuse](#reuse)  
@@ -424,34 +424,29 @@ scripts may also be defined in the same places. These are only run when other
 scripts fail, and their purpose is to display further information which might
 be helpful when trying to understand what went wrong.
 
-<a name="if-condition"/>
+<a name="skipping"/>
 
-## If condition
+## Skipping
 
-A if condition determines whether a task should be skipped before it begins execution.
+A skip condition determines whether a task should be skipped before it begins execution.
 
-If conditions can only be defined at the task level. They are evaluated before the task preparation phase.
+The skip condition can only be defined at the task level. They are evaluated before the task preparation phase.
 If the condition evaluates to true, the task is completely skipped — including the prepare, execute, and restore phases.
 
-Each if condition must include:
+Each skip condition must include:
 
- * skip-reason: A human-readable message explaining why the task was skipped.
-This message appears in the execution log.
+ * if: A shell expression (or set of expressions) evaluated to decide whether the task should be skipped.
+ * reason: A human-readable message explaining why the task was skipped.
 
- * check: A shell expression (or set of expressions) evaluated to decide whether the task should be skipped.
-If the check returns a successful status (0), the task is skipped.
-
-This is an example to show how to define a if condition for a task:
+This is an example to show how to define a skip condition for a task:
 
 ```
 summary: if condition example
-if:
-    - skip-reason: This is the first skip reason
-      check: |
-        [ -d /path/to/dir ]
-    - skip-reason: This is the second skip reason
-      check: |
-        [ -f /path/to/file ]
+skip:
+    - reason: This is the first skip reason
+      if: [ -d /path/to/dir ]
+    - reason: This is the second skip reason
+      if: [ -f /path/to/file ]
 execute: |
     echo "This is an example"
 ```

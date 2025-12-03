@@ -10,9 +10,9 @@ environment:
     skip/T4: true
     exec/T4: false
 
-if:
-  - skip-reason: This is the skip reason
-    check: |
+skip:
+  - reason: This is the skip reason
+    if: |
       [ "$skip" = "true" ]
 
 execute: |

@@ -729,11 +729,12 @@ func (r *Runner) worker(backend *Backend, system *System, order []int) {
 
 		// Check if the task should be skipped
 		skipRun := false
-		for _, skip := range job.Task.If {
-			if r.run(client, job, checking, job, skip.Check, debug, &abend) {
-				printft(time.Now(), startTime|endTime, "Skipping %s: %s", job, skip.Reason)
+		for _, skip := range job.Task.Skip {
+			if r.run(client, job, checking, job, skip.If, debug, &abend) {
 				skipRun = true
+				job.SkipReason = skip.Reason
 				r.add(&stats.TaskSkipped, job)
+				printft(time.Now(), startTime|endTime, "%s %s (%s)...", cases.Title(language.Und).String(skipping), job, client.server.Label())
 				break
 			}
 		}
@@ -1250,7 +1251,7 @@ func (s *stats) log() {
 	printf("Successful tasks: %d", len(s.TaskDone))
 	printf("Aborted tasks: %d", len(s.TaskAbort))
 
-	logNames(printf, "Skipped tasks", s.TaskSkipped, taskName)
+	logNames(printf, "Skipped tasks", s.TaskSkipped, skipReason)
 	logNames(printf, "Failed tasks", s.TaskError, taskName)
 	logNames(printf, "Failed task prepare", s.TaskPrepareError, taskName)
 	logNames(printf, "Failed task restore", s.TaskRestoreError, taskName)
@@ -1271,6 +1272,10 @@ func taskName(job *Job) string {
 		return job.Task.Name
 	}
 	return job.Task.Name + ":" + job.Variant
+}
+
+func skipReason(job *Job) string {
+	return taskName(job) + " - " + job.SkipReason
 }
 
 func logNames(f func(format string, args ...interface{}), prefix string, jobs []*Job, name func(job *Job) string) {

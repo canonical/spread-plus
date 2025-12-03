@@ -8,12 +8,12 @@ environment:
     skip_1/T3: false
     skip_2/T3: false
 
-if:
-  - skip-reason: This is the first skip reason
-    check: |
+skip:
+  - reason: This is the first skip reason
+    if: |
       [ "$skip_1" = "true" ]
-  - skip-reason: This is the second skip reason
-    check: |
+  - reason: This is the second skip reason
+    if: |
       [ "$skip_2" = "true" ]
 
 execute: |
