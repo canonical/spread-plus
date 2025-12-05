@@ -127,12 +127,16 @@ execute: |
     test 0 -eq $(jq -r '.results."task-passed"' < test.json)
     test 0 -eq $(jq -r '.results."task-failed"' < test.json)
     test 0 -eq $(jq -r '.results."task-aborted"' < test.json)
-    test 0 -eq $(jq -r '.results."task-skipped"' < test.json)
+    test 2 -eq $(jq -r '.results."task-skipped"' < test.json)
     test 1 -eq $(jq -r '.results."suite-skipped"' < test.json)
     # No suite prepare and restore tasks
     test 0 -eq $(jq -r '[.items[] | select( .level == "suite" and .verb == "preparing" )] | length' test.json)
     test 0 -eq $(jq -r '[.items[] | select( .level == "suite" and .verb == "restoring" )] | length' test.json)
     test 1 -eq $(jq -r '[.items[] | select( .level == "suite" and .verb == "checking" )] | length' test.json)
+    # No task prepare and restore tasks
+    test 0 -eq $(jq -r '[.items[] | select( .level == "task" and .verb == "preparing" )] | length' test.json)
+    test 0 -eq $(jq -r '[.items[] | select( .level == "task" and .verb == "restoring" )] | length' test.json)
+    test 0 -eq $(jq -r '[.items[] | select( .level == "task" and .verb == "checking" )] | length' test.json)
     # two tests and 1 suite with skipped status
-    test 0 -eq $(jq -r '[.items[] | select( .level == "task" and .skipped == true )] | length' test.json)
+    test 2 -eq $(jq -r '[.items[] | select( .level == "task" and .skipped == true )] | length' test.json)
     test 1 -eq $(jq -r '[.items[] | select( .level == "suite" and .skipped == true )] | length' test.json)

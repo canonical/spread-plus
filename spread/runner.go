@@ -685,6 +685,8 @@ outer:
 			continue
 		}
 		if skippedSuite[job.Suite] != "" {
+			job.SkipReason = skippedSuite[job.Suite]
+			r.add(&stats.TaskSkip, job)
 			continue
 		}
 
@@ -727,7 +729,8 @@ outer:
 			for _, skip := range job.Suite.Skip {
 				if r.run(client, job, checking, job.Suite, skip.If, job.Suite.Debug, &abend) {
 					job.SkipReason = skip.Reason
-					r.add(&stats.SuiteSkipped, job)
+					r.add(&stats.SuiteSkip, job)
+					r.add(&stats.TaskSkip, job)
 					skippedSuite[job.Suite] = skip.Reason
 					printft(time.Now(), startTime|endTime, "%s %s (%s)...", cases.Title(language.Und).String(skipping), job, client.server.Label())
 					continue outer
@@ -750,7 +753,7 @@ outer:
 			if r.run(client, job, checking, job, skip.If, debug, &abend) {
 				skipRun = true
 				job.SkipReason = skip.Reason
-				r.add(&stats.TaskSkipped, job)
+				r.add(&stats.TaskSkip, job)
 				printft(time.Now(), startTime|endTime, "%s %s (%s)...", cases.Title(language.Und).String(skipping), job, client.server.Label())
 				break
 			}
@@ -1203,11 +1206,11 @@ func (r *Runner) completeReport() error {
 		filename := r.options.Json
 
 		// Add skipped tasks to the report
-		for _, job := range r.stats.TaskSkipped {
+		for _, job := range r.stats.TaskSkip {
 			r.report.addSkippedTask(job.Backend.Name, job.System.Name, job.Task.Name, job.Variant)
 		}
 
-		for _, job := range r.stats.SuiteSkipped {
+		for _, job := range r.stats.SuiteSkip {
 			r.report.addSkippedSuite(job.Backend.Name, job.System.Name, job.Suite.Name)
 		}
 
@@ -1217,8 +1220,8 @@ func (r *Runner) completeReport() error {
 		}
 
 		// Add results to the report
-		r.report.addTaskResults(len(r.stats.TaskDone), len(r.stats.TaskError), len(r.stats.TaskAbort), len(r.stats.TaskSkipped), len(r.stats.TaskPrepareError), len(r.stats.TaskRestoreError))
-		r.report.addSuiteResults(len(r.stats.SuitePrepareError), len(r.stats.SuiteRestoreError), len(r.stats.SuiteSkipped))
+		r.report.addTaskResults(len(r.stats.TaskDone), len(r.stats.TaskError), len(r.stats.TaskAbort), len(r.stats.TaskSkip), len(r.stats.TaskPrepareError), len(r.stats.TaskRestoreError))
+		r.report.addSuiteResults(len(r.stats.SuitePrepareError), len(r.stats.SuiteRestoreError), len(r.stats.SuiteSkip))
 		r.report.addBackendResults(len(r.stats.BackendPrepareError), len(r.stats.BackendRestoreError))
 		r.report.addProjectResults(len(r.stats.ProjectPrepareError), len(r.stats.ProjectRestoreError))
 
@@ -1238,10 +1241,10 @@ type stats struct {
 	TaskDone            []*Job
 	TaskError           []*Job
 	TaskAbort           []*Job
-	TaskSkipped         []*Job
+	TaskSkip            []*Job
 	TaskPrepareError    []*Job
 	TaskRestoreError    []*Job
-	SuiteSkipped        []*Job
+	SuiteSkip           []*Job
 	SuitePrepareError   []*Job
 	SuiteRestoreError   []*Job
 	BackendPrepareError []*Job
@@ -1273,11 +1276,11 @@ func (s *stats) log() {
 	printf("Successful tasks: %d", len(s.TaskDone))
 	printf("Aborted tasks: %d", len(s.TaskAbort))
 
-	logNames(printf, "Skipped tasks", s.TaskSkipped, taskSkipReason)
+	logNames(printf, "Skipped tasks", s.TaskSkip, taskSkipReason)
 	logNames(printf, "Failed tasks", s.TaskError, taskName)
 	logNames(printf, "Failed task prepare", s.TaskPrepareError, taskName)
 	logNames(printf, "Failed task restore", s.TaskRestoreError, taskName)
-	logNames(printf, "Skipped suites", s.SuiteSkipped, suiteSkipReason)
+	logNames(printf, "Skipped suites", s.SuiteSkip, suiteSkipReason)
 	logNames(printf, "Failed suite prepare", s.SuitePrepareError, suiteName)
 	logNames(printf, "Failed suite restore", s.SuiteRestoreError, suiteName)
 	logNames(printf, "Failed backend prepare", s.BackendPrepareError, backendName)
