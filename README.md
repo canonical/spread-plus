@@ -445,7 +445,7 @@ Each skip condition must include:
 Below is an example showing how to define skip conditions for a task:
 
 ```
-summary: if condition example
+summary: skip condition example
 skip:
     - reason: This is the first skip reason
       if: [ -d /path/to/dir ]

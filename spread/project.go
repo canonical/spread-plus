@@ -672,10 +672,10 @@ func Load(path string) (*Project, error) {
 		suite.PrepareEach = strings.TrimSpace(suite.PrepareEach)
 		suite.RestoreEach = strings.TrimSpace(suite.RestoreEach)
 		suite.DebugEach = strings.TrimSpace(suite.DebugEach)
-		for _, skip := range suite.Skip {
-			skip.Reason = strings.TrimSpace(skip.Reason)
-			skip.If = strings.TrimSpace(skip.If)
-			if skip.If == "" || skip.Reason == "" {
+		for i := range suite.Skip {
+			suite.Skip[i].Reason = strings.TrimSpace(suite.Skip[i].Reason)
+			suite.Skip[i].If = strings.TrimSpace(suite.Skip[i].If)
+			if suite.Skip[i].If == "" || suite.Skip[i].Reason == "" {
 				return nil, fmt.Errorf("%s is missing either the if or reason for the skip", suite)
 			}
 		}
