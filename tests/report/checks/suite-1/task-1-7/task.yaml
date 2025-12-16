@@ -1,0 +1,20 @@
+summary: task is skipped
+
+details: test
+
+skip:
+  - reason: This task is skipped
+    if: |
+      exit 0
+
+prepare: |
+  exit 1
+
+execute: |
+  exit 1
+
+restore: |
+  exit 1
+
+debug:  |
+  exit 1
