@@ -83,7 +83,7 @@ func (p *qemuProvider) Backend() *Backend {
 	return p.backend
 }
 
-func (p *qemuProvider) GarbageCollect(collect int) error {
+func (p *qemuProvider) GarbageCollect() error {
 	return nil
 }
 

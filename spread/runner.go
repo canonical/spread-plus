@@ -44,7 +44,6 @@ type Options struct {
 	Seed           int64
 	Repeat         int
 	GarbageCollect bool
-	Collect        int
 	Live           bool
 	Perf           bool
 	Workers        int
@@ -122,7 +121,7 @@ func Start(project *Project, options *Options) (*Runner, error) {
 
 	if options.GarbageCollect {
 		for _, p := range r.providers {
-			if err := p.GarbageCollect(options.Collect); err != nil {
+			if err := p.GarbageCollect(); err != nil {
 				printf("Error collecting garbage from %q: %v", p.Backend().Name, err)
 			}
 		}

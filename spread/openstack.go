@@ -982,13 +982,11 @@ func (p *openstackProvider) removeVolume(ctx context.Context, s *openstackServer
 	}
 }
 
-func (p *openstackProvider) GarbageCollect(collect int) error {
+func (p *openstackProvider) GarbageCollect() error {
 	if err := p.checkKey(); err != nil {
 		return err
 	}
 
-	// remainingCollect will start with -1 when all the instances have to be collected
-	remainingCollect := collect
 	instances, err := p.listServers()
 	if err != nil {
 		return err
@@ -1008,9 +1006,6 @@ func (p *openstackProvider) GarbageCollect(collect int) error {
 
 	// Iterate over all the running instances
 	for _, s := range instances {
-		if remainingCollect == 0 {
-			break
-		}
 
 		serverTimeout := haltTimeout
 		if value, ok := s.d.Labels["halt-timeout"]; ok {
@@ -1027,15 +1022,12 @@ func (p *openstackProvider) GarbageCollect(collect int) error {
 		}
 
 		printf("Checking openstack instance %s...", s)
-
 		runningTime := now.Sub(s.d.Created)
 		if runningTime > serverTimeout {
 			printf("Server %s exceeds halt-timeout. Shutting it down...", s)
 			err := p.removeMachine(context.Background(), s)
 			if err != nil {
 				printf("WARNING: Cannot garbage collect server %s: %v", s, err)
-			} else {
-				remainingCollect = remainingCollect - 1
 			}
 		}
 	}

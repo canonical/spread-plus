@@ -155,7 +155,7 @@ func (p *TestFlingerProvider) Backend() *Backend {
 	return p.backend
 }
 
-func (p *TestFlingerProvider) GarbageCollect(collect int) error {
+func (p *TestFlingerProvider) GarbageCollect() error {
 	jobs, err := p.list()
 	if err != nil {
 		return err

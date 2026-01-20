@@ -66,7 +66,7 @@ func (p *adhocProvider) Backend() *Backend {
 	return p.backend
 }
 
-func (p *adhocProvider) GarbageCollect(collect int) error {
+func (p *adhocProvider) GarbageCollect() error {
 	return nil
 }
 
