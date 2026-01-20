@@ -83,6 +83,9 @@ prepare: |
         lxd.lxc config set core.proxy_https "$https_proxy"
         lxd.lxc profile set default environment.https_proxy "$https_proxy"
     fi
+    if [ -n "${no_proxy:-}" ]; then
+        lxd.lxc profile set default environment.no_proxy "$no_proxy"
+    fi
     lxd init --auto
 
     # Either use pregenerated spread if exists or build it
