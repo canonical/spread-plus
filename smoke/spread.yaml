@@ -18,34 +18,6 @@ backends:
                 workers: 1
 
     openstack:
-        key: "$(HOST: echo $OS_CREDENTIALS_AMD64_PS6)"
-        plan: staging-cpu2-ram4-disk20
-        halt-timeout: 2h
-        wait-timeout: 10m
-        groups: [default]        
-        environment:
-            HTTP_PROXY: 'http://squid.internal:3128'
-            HTTPS_PROXY: 'http://squid.internal:3128'
-            http_proxy: 'http://squid.internal:3128'
-            https_proxy: 'http://squid.internal:3128'
-            no_proxy: '127.0.0.1,ubuntu.com'
-            NO_PROXY: '127.0.0.1,ubuntu.com'
-        systems:
-            - fedora-41-64:
-                  image: snapd-spread/fedora-41-64
-            - fedora-42-64:
-                  image: snapd-spread/fedora-42-64
-            - opensuse-15.6-64:
-                  image: snapd-spread/opensuse-15.6-64
-            - opensuse-tumbleweed-64:
-                  image: snapd-spread/opensuse-tumbleweed-64
-            - centos-9-64:
-                  image: snapd-spread/centos-9-64
-            - debian-sid-64:
-                  image: snapd-spread/debian-sid-64
-
-    openstack-ps7:
-        type: openstack
         key: '$(HOST: echo "$OS_CREDENTIALS_AMD64_PS7")'
         plan: shared.xsmall
         halt-timeout: 2h
@@ -95,7 +67,19 @@ backends:
             - debian-12-64:
                   image: snapd-spread/debian-12-64
 
-    openstack-arm-ps7:
+            - fedora-42-64:
+                  image: snapd-spread/fedora-42-64
+            - opensuse-15.6-64:
+                  image: snapd-spread/opensuse-15.6-64
+            - opensuse-tumbleweed-64:
+                  image: snapd-spread/opensuse-tumbleweed-64
+            - centos-9-64:
+                  image: snapd-spread/centos-9-64
+            - debian-sid-64:
+                  image: snapd-spread/debian-sid-64
+
+
+    openstack-arm:
         type: openstack
         key: '$(HOST: echo "$OS_CREDENTIALS_ARM64_PS7")'
         plan: shared.xsmall.arm64
