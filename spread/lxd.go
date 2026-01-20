@@ -81,7 +81,7 @@ func (p *lxdProvider) Backend() *Backend {
 	return p.backend
 }
 
-func (p *lxdProvider) GarbageCollect(collect int) error {
+func (p *lxdProvider) GarbageCollect() error {
 	return nil
 }
 
