@@ -1193,10 +1193,6 @@ func (p *Project) Jobs(options *Options) ([]*Job, error) {
 		}
 	}
 
-	if p.TasksLimit > 0 && len(jobs) > p.TasksLimit {
-		return nil, fmt.Errorf("The number of jobs (%d) is greater then the tasks limit set (%d)", len(jobs), p.TasksLimit)
-	}
-
 	sort.Sort(jobsByName(jobs))
 	if options.Order {
 		jobs = options.Filter.Order(jobs)
