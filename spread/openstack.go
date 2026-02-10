@@ -18,7 +18,6 @@ import (
 	goosehttp "github.com/go-goose/goose/v5/http"
 	"github.com/joho/godotenv"
 
-	"github.com/go-goose/goose/v5/cinder"
 	"github.com/go-goose/goose/v5/glance"
 	"github.com/go-goose/goose/v5/identity"
 	"github.com/go-goose/goose/v5/neutron"
@@ -74,9 +73,6 @@ type openstackProvider struct {
 	computeClient novaComputeClient
 	networkClient *neutron.Client
 	imageClient   glanceImageClient
-	volumeClient  *cinder.Client
-
-	services *openstackServices
 
 	mu sync.Mutex
 
@@ -179,7 +175,7 @@ func (s *openstackServer) SerialOutput() (string, error) {
 	defer retry.Stop()
 
 	for {
-		err := s.p.osClient.SendRequest("POST", s.p.services.compute.Name, s.p.services.compute.version, url, &requestData)
+		err := s.p.osClient.SendRequest("POST", "compute", "v2", url, &requestData)
 		if err != nil {
 			debugf("failed to retrieve the serial console for server %s: %v", s, err)
 		}
@@ -863,63 +859,7 @@ func (p *openstackProvider) listServers() ([]*openstackServer, error) {
 	return instances, nil
 }
 
-func (p *openstackProvider) listVolumes() ([]*openstackVolumeData, error) {
-	debug("Listing available openstack volumes...")
-
-	volumeResults, err := p.volumeClient.GetVolumesDetail()
-	if err != nil {
-		return nil, fmt.Errorf("cannot list openstack volumes: %v", &openstackError{err})
-	}
-
-	var volumes []*openstackVolumeData
-	for _, v := range volumeResults.Volumes {
-		status := v.Status
-		if status == volumeStatusAvailable || strings.HasPrefix(status, volumeStatusError) {
-			attachments := []VolumeAttachment{}
-			for _, a := range v.Attachments {
-				att := VolumeAttachment{
-					Id:       a.Id,
-					ServerId: a.ServerId,
-					VolumeId: a.VolumeId,
-				}
-				attachments = append(attachments, att)
-			}
-			d := openstackVolumeData{
-				Id:          v.ID,
-				Name:        v.Name,
-				Status:      v.Status,
-				Attachments: attachments,
-			}
-			volumes = append(volumes, &d)
-		}
-	}
-	return volumes, nil
-}
-
-func (p *openstackProvider) listSnapshots() ([]*openstackSnapshotData, error) {
-	debug("Listing available openstack snapshots...")
-
-	snapshotResults, err := p.volumeClient.GetSnapshotsDetail()
-	if err != nil {
-		return nil, fmt.Errorf("cannot list openstack snapshots: %v", &openstackError{err})
-	}
-
-	var snapshots []*openstackSnapshotData
-	for _, s := range snapshotResults.Snapshots {
-		d := openstackSnapshotData{
-			Id:       s.ID,
-			Name:     s.Name,
-			Status:   s.Status,
-			Size:     s.Size,
-			VolumeID: s.VolumeID,
-		}
-		snapshots = append(snapshots, &d)
-	}
-	return snapshots, nil
-}
-
 var openstackRemoveServerTimeout = 3 * time.Minute
-var openstackRemoveVolumeTimeout = 2 * time.Minute
 var openstackRemoveRetry = 5 * time.Second
 
 func (p *openstackProvider) removeMachine(ctx context.Context, s *openstackServer) error {
@@ -937,25 +877,9 @@ func (p *openstackProvider) removeMachine(ctx context.Context, s *openstackServe
 		return nil
 	}
 
-	volumesToRemove := []nova.VolumeAttachment{}
-	if !s.d.DeleteOnTermination {
-		volumesToRemove, err = p.computeClient.ListVolumeAttachments(s.d.Id)
-		if err != nil {
-			return fmt.Errorf("failed to retrieve the volumes attached to the instance: %v", err)
-		}
-	}
-
 	err = p.removeServer(ctx, s)
 	if err != nil {
 		return err
-	}
-
-	// Remove manually the volumes when DeleteOnTermination is false
-	for _, volumeAttachment := range volumesToRemove {
-		err = p.removeVolume(ctx, s, volumeAttachment.VolumeId)
-		if err != nil {
-			return err
-		}
 	}
 
 	return nil
@@ -986,52 +910,12 @@ func (p *openstackProvider) removeServer(ctx context.Context, s *openstackServer
 	}
 }
 
-func (p *openstackProvider) removeVolume(ctx context.Context, s *openstackServer, volumeId string) error {
-	timeout := time.After(openstackRemoveVolumeTimeout)
-	retry := time.NewTicker(openstackRemoveRetry)
-	defer retry.Stop()
-
-	for {
-		volumeResults, err := p.volumeClient.GetVolume(volumeId)
-		if err != nil {
-			// this is when the volume was already removed
-			return nil
-		}
-
-		status := volumeResults.Volume.Status
-		if status == volumeStatusAvailable || strings.HasPrefix(status, volumeStatusError) {
-			// When the status is either available or error, the volume is deleted
-			// otherwise, it will garbage collected after a time when it becomes available
-			err := p.volumeClient.DeleteVolume(volumeId)
-			if err != nil {
-				return fmt.Errorf("cannot remove openstack volume: %v", &openstackError{err})
-			}
-			return nil
-		}
-		select {
-		case <-retry.C:
-		case <-timeout:
-			printf("cannot remove the openstack volume %s for server %s, it remains with status %s", volumeResults.Volume.ID, s.d.Name, status)
-			return nil
-		}
-	}
-}
-
 func (p *openstackProvider) GarbageCollect() error {
 	if err := p.checkKey(); err != nil {
 		return err
 	}
 
 	instances, err := p.listServers()
-	if err != nil {
-		return err
-	}
-
-	volumes, err := p.listVolumes()
-	if err != nil {
-		return err
-	}
-	snapshots, err := p.listSnapshots()
 	if err != nil {
 		return err
 	}
@@ -1067,63 +951,6 @@ func (p *openstackProvider) GarbageCollect() error {
 		}
 	}
 
-	// Iterate over all the volumes
-	for _, v := range volumes {
-		printf("Checking openstack volume %s...", v.Id)
-
-		snapshotAttached := ""
-		for _, s := range snapshots {
-			if s.VolumeID == v.Id {
-				snapshotAttached = s.Id
-				break
-			}
-		}
-
-		if snapshotAttached == "" {
-			printf("Volume ready to be deleted %s. Shutting it down...", v.Id)
-			err := p.volumeClient.DeleteVolume(v.Id)
-			if err != nil {
-				printf("WARNING: Cannot garbage collect volume %s: %v", v.Id, err)
-			}
-		}
-	}
-
-	return nil
-}
-
-func (p *openstackProvider) saveServices() error {
-	endpoints := p.osClient.EndpointsForRegion(p.region)
-	p.services = &openstackServices{}
-
-	for k, v := range endpoints {
-		if strings.HasPrefix(k, "volume") || strings.HasPrefix(k, "compute") {
-			ver := "v2"
-			if strings.HasSuffix(k, "v3") {
-				ver = "v3"
-			}
-			endpointUrl, err := url.Parse(v)
-			if err != nil {
-				return &FatalError{fmt.Errorf("error parsing endpoint: %v", &openstackError{err})}
-			}
-
-			service := OpenstackService{
-				Name:     k,
-				version:  ver,
-				endpoint: endpointUrl,
-			}
-			if strings.HasPrefix(k, "compute") {
-				p.services.compute = service
-			} else {
-				p.services.volume = service
-			}
-		}
-	}
-	if p.services.compute.Name == "" {
-		return &FatalError{fmt.Errorf("compute services endpoint not found")}
-	}
-	if p.services.volume.Name == "" {
-		return &FatalError{fmt.Errorf("volume services endpoint not found")}
-	}
 	return nil
 }
 
@@ -1176,19 +1003,6 @@ func (p *openstackProvider) checkKey() error {
 		p.computeClient = nova.New(authClient)
 		p.networkClient = neutron.New(authClient)
 		p.imageClient = glance.New(authClient)
-
-		err = p.saveServices()
-		if err != nil {
-			return &FatalError{fmt.Errorf("failed to save services: %v", &openstackError{err})}
-		}
-
-		// Create cinder client
-		handleRequest := cinder.SetAuthHeaderFn(p.osClient.Token,
-			func(req *http.Request) (*http.Response, error) {
-				return http.DefaultClient.Do(req)
-			})
-		p.volumeClient = cinder.NewClient(p.osClient.TenantId(), p.services.volume.endpoint, handleRequest)
-		p.keyErr = err
 	}
 
 	p.keyChecked = true
