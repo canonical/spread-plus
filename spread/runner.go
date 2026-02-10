@@ -239,6 +239,14 @@ func (r *Runner) loop() (err error) {
 		}
 	}
 
+	// Check the jobs limit before starting any worker, so that if the limit is exceeded,
+	// no worker will be started and the error will be returned immediately.
+	if !r.options.Discard {
+		if r.project.TasksLimit > 0 && len(r.pending) > r.project.TasksLimit {
+			return fmt.Errorf("The number of jobs (%d) is greater then the tasks limit set (%d)", len(r.pending), r.project.TasksLimit)
+		}
+	}
+
 	r.done = make(chan bool, r.alive)
 
 	msg := fmt.Sprintf("Starting %d worker%s for the following jobs", r.alive, nth(r.alive, "", "", "s"))

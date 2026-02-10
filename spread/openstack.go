@@ -896,6 +896,14 @@ var openstackRemoveVolumeTimeout = 2 * time.Minute
 var openstackRemoveRetry = 5 * time.Second
 
 func (p *openstackProvider) removeMachine(ctx context.Context, s *openstackServer) error {
+	if p == nil || p.computeClient == nil {
+		return fmt.Errorf("The provider or compute client are not initialized")
+	}
+
+	if s == nil || s.d.Id == "" {
+		return fmt.Errorf("The server pointer is not initialized")
+	}
+
 	_, err := p.computeClient.GetServer(s.d.Id)
 	if err != nil {
 		// this is when the server was already removed
