@@ -377,24 +377,51 @@ func (p *openstackProvider) findImage(imageName string) (*glance.ImageDetail, er
 	}
 
 	// In openstack there are no "project" specific images and no
-	// concept of a "family" so the lookup is similar but a bit
-	// simpler than in the google backend. Google checks for a)
-	// exact match, b) family match, c) term match, only (a), (c)
-	// are done here as there is no (b) in openstack. If multiple
-	// term matches are found the newest image is selected.
-	searchTerms := toTerms(imageName)
+	// concept of a "family" so the lookup is similar but it checks
+	// by prefix instead of the family. The matching is done in the following order:
+	// a) exact match, b) prefix and c) term match. If multiple
+	// term matches  prefixes are found the newest image is selected.
+
 	// First consider exact matches on name.
 	for _, image := range images {
-		// First consider exact matches on name.
 		if image.Name == imageName {
 			// return the image when it matchs exactly with the provided name
 			debugf("Name match: %#v matches %#v", imageName, image)
 			return &image, nil
 		}
+	}
 
-		// Otherwise use term matching and prefix.
+	// Second, use prefix matching. The image is selected when the name of the image starts
+	// with the provided name. When multiple images match, the newest one is selected.
+	for _, image := range images {
+		if strings.HasPrefix(image.Name, imageName) {
+			debugf("Prefix match: %#v matches %#v", imageName, image)
+			// Check if the creation date for the current image is after the previous selected one
+			currCreatedDate, err := time.Parse(time.RFC3339, image.Created)
+			// When the creation date is not set or it cannot be parsed, it is considered as created just now
+			if err != nil {
+				currCreatedDate = time.Time{}
+			}
+
+			// Save the image when either it is the first match or it is newer than the previous match
+			if lastImage.Id == "" || currCreatedDate.After(lastCreatedDate) {
+				debugf("Newer prefix match found: %#v", image)
+				lastImage = image
+				lastCreatedDate = currCreatedDate
+			}
+		}
+	}
+
+	if lastImage.Id != "" {
+		return &lastImage, nil
+	}
+
+	// Third, use term matching. The image is selected when all the terms in the provided
+	// name are contained in the image name. When multiple images match, the newest one is selected.
+	searchTerms := toTerms(imageName)
+	for _, image := range images {
 		imageTerms := toTerms(image.Name)
-		if containsTerms(imageTerms, searchTerms) || strings.HasPrefix(image.Name, imageName) {
+		if containsTerms(imageTerms, searchTerms) {
 			debugf("Terms match: %#v matches %#v", imageName, image)
 			// Check if the creation date for the current image is after the previous selected one
 			currCreatedDate, err := time.Parse(time.RFC3339, image.Created)
