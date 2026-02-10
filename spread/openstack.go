@@ -74,8 +74,6 @@ type openstackProvider struct {
 	networkClient *neutron.Client
 	imageClient   glanceImageClient
 
-	services *openstackServices
-
 	mu sync.Mutex
 
 	keyChecked bool
@@ -177,7 +175,7 @@ func (s *openstackServer) SerialOutput() (string, error) {
 	defer retry.Stop()
 
 	for {
-		err := s.p.osClient.SendRequest("POST", s.p.services.compute.Name, s.p.services.compute.version, url, &requestData)
+		err := s.p.osClient.SendRequest("POST", "compute", "v2", url, &requestData)
 		if err != nil {
 			debugf("failed to retrieve the serial console for server %s: %v", s, err)
 		}
@@ -956,42 +954,6 @@ func (p *openstackProvider) GarbageCollect() error {
 	return nil
 }
 
-func (p *openstackProvider) saveServices() error {
-	endpoints := p.osClient.EndpointsForRegion(p.region)
-	p.services = &openstackServices{}
-
-	for k, v := range endpoints {
-		if strings.HasPrefix(k, "volume") || strings.HasPrefix(k, "compute") {
-			ver := "v2"
-			if strings.HasSuffix(k, "v3") {
-				ver = "v3"
-			}
-			endpointUrl, err := url.Parse(v)
-			if err != nil {
-				return &FatalError{fmt.Errorf("error parsing endpoint: %v", &openstackError{err})}
-			}
-
-			service := OpenstackService{
-				Name:     k,
-				version:  ver,
-				endpoint: endpointUrl,
-			}
-			if strings.HasPrefix(k, "compute") {
-				p.services.compute = service
-			} else {
-				p.services.volume = service
-			}
-		}
-	}
-	if p.services.compute.Name == "" {
-		return &FatalError{fmt.Errorf("compute services endpoint not found")}
-	}
-	if p.services.volume.Name == "" {
-		return &FatalError{fmt.Errorf("volume services endpoint not found")}
-	}
-	return nil
-}
-
 func (p *openstackProvider) checkKey() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -1041,11 +1003,6 @@ func (p *openstackProvider) checkKey() error {
 		p.computeClient = nova.New(authClient)
 		p.networkClient = neutron.New(authClient)
 		p.imageClient = glance.New(authClient)
-
-		err = p.saveServices()
-		if err != nil {
-			return &FatalError{fmt.Errorf("failed to save services: %v", &openstackError{err})}
-		}
 	}
 
 	p.keyChecked = true
