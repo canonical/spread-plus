@@ -160,7 +160,7 @@ func (s *openstackServer) ReuseData() interface{} {
 var openstackSerialOutputTimeout = 30 * time.Second
 var openstackSerialConsoleErr = fmt.Errorf("cannot get console output")
 
-func (s *openstackServer) SerialOutput(ctx context.Context) (string, error) {
+func (s *openstackServer) SerialOutput() (string, error) {
 	_, err := s.p.computeClient.GetServer(s.d.Id)
 	if err != nil {
 		// this is when the server is removed
@@ -192,8 +192,6 @@ func (s *openstackServer) SerialOutput(ctx context.Context) (string, error) {
 		case <-retry.C:
 		case <-timeout:
 			return "", fmt.Errorf("failed to retrieve the serial console for instance %s: timeout reached", s)
-		case <-ctx.Done():
-			return "", fmt.Errorf("failed to retrieve the serial console for instance %s: interrupted", s)
 		}
 	}
 }
@@ -625,7 +623,7 @@ func (p *openstackProvider) waitServerBootSerial(ctx context.Context, s *opensta
 
 	var marker = openstackReadyMarker
 	for {
-		resp, err := s.SerialOutput(ctx)
+		resp, err := s.SerialOutput()
 		if err != nil {
 			return fmt.Errorf("%w: %v", openstackSerialConsoleErr, err)
 		}
