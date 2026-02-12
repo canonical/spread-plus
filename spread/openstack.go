@@ -164,7 +164,7 @@ func (s *openstackServer) SerialOutput(ctx context.Context) (string, error) {
 	_, err := s.p.computeClient.GetServer(s.d.Id)
 	if err != nil {
 		// this is when the server is removed
-		return "Server removed", nil
+		return "", fmt.Errorf("failed to retrieve the serial console, server removed: %s", s)
 	}
 
 	url := fmt.Sprintf("servers/%s/action", s.d.Id)
