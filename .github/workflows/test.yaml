@@ -32,7 +32,7 @@ jobs:
           GOARCH="${{ matrix.arch }}" go build -o spread-plus cmd/spread/main.go
 
     - name: Upload spread binary to cache
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: "spread-plus-${{ github.run_id }}-${{ matrix.arch }}"
         path: "spread-plus"
@@ -53,7 +53,7 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Download spread-plus
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v7
       with:
         name: "spread-plus-${{ github.run_id }}-amd64"
         path: "${{ github.workspace }}/bin"
@@ -100,7 +100,7 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Download spread-plus
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v7
       with:
         name: "spread-plus-${{ github.run_id }}-amd64"
         path: "${{ github.workspace }}/bin"
@@ -142,7 +142,7 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Download spread-plus
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v7
       with:
         name: "spread-plus-${{ github.run_id }}-amd64"
         path: "${{ github.workspace }}/bin"
@@ -197,7 +197,7 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Download spread-plus
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v7
       with:
         name: "spread-plus-${{ github.run_id }}-amd64"
         path: "${{ github.workspace }}/bin"
@@ -252,7 +252,7 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Download spread-plus
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v7
       with:
         name: "spread-plus-${{ github.run_id }}-amd64"
         path: "${{ github.workspace }}/bin"
@@ -287,7 +287,7 @@ jobs:
 
     steps:
     - name: Download spread-plus
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v7
       with:
         name: "spread-plus-${{ github.run_id }}-${{ matrix.arch }}"
         path: "${{ github.workspace }}/bin"
