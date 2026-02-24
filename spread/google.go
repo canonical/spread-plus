@@ -418,9 +418,22 @@ func (p *googleProvider) createMachine(ctx context.Context, system *System) (*go
 	}
 	debugf("System %s will use Google image %s", system, sourceImage)
 
+	owner := strings.ToLower(username())
+	if !p.validLabel(owner) {
+		// the username doesn't match Google's label constraints:
+		// https://docs.cloud.google.com/compute/docs/labeling-resources
+		// The username might be an email address (corporate setup) so do a best-effort
+		// check and try to preserve the personal part of the address. We could
+		// encode it in base64url but those wouldn't be human readable
+
+		if index, ok := isKindOfAnEmail(owner); ok {
+			owner = strings.ReplaceAll(owner[:index], ".", "-")
+		}
+	}
+
 	labels := googleParams{
 		"spread": "true",
-		"owner":  strings.ToLower(username()),
+		"owner":  owner,
 		"reuse":  strconv.FormatBool(p.options.Reuse),
 	}
 	if p.validLabel(p.options.Password) {
@@ -546,6 +559,18 @@ func (p *googleProvider) createMachine(ctx context.Context, system *System) (*go
 	}
 
 	return s, nil
+}
+
+// isKindOfAnEmail checks if the string has a '@' character and a '.' after it,
+// if it does it returns true and the index of the @.
+func isKindOfAnEmail(str string) (index int, ok bool) {
+	if index = strings.Index(str, "@"); index != -1 {
+		if strings.Index(str[index:], ".") != -1 {
+			return index, true
+		}
+	}
+
+	return -1, false
 }
 
 func (p *googleProvider) waitServerBoot(ctx context.Context, s *googleServer) error {
