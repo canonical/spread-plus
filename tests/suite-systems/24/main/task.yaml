@@ -1,0 +1,5 @@
+summary: Empty spread task
+systems:
+    - ubuntu-24.04
+    - ubuntu-22.04
+execute: exit 0

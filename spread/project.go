@@ -950,6 +950,33 @@ func (p *Project) backendNames() []string {
 	return bnames
 }
 
+func listAllowsSystem(system string, list []string) (bool, error) {
+	if len(list) == 0 {
+		return true, nil
+	}
+	for _, name := range list {
+		add := strings.HasPrefix(name, "+")
+		remove := strings.HasPrefix(name, "-")
+		if remove {
+			continue
+		}
+		if add {
+			name = name[1:]
+		}
+		if system == name {
+			return true, nil
+		}
+		matched, err := filepath.Match(name, system)
+		if err != nil {
+			return false, err
+		}
+		if matched {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (p *Project) Jobs(options *Options) ([]*Job, error) {
 	var jobs []*Job
 
@@ -1022,6 +1049,13 @@ func (p *Project) Jobs(options *Options) ([]*Job, error) {
 					system := backend.Systems[sysname]
 					// not for us
 					if system == nil {
+						continue
+					}
+					suiteok, err := listAllowsSystem(sysname, suite.Systems)
+					if err != nil {
+						return nil, err
+					}
+					if !suiteok {
 						continue
 					}
 					yenv := envmap{system, system.Environment}
