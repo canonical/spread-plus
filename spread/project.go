@@ -954,10 +954,12 @@ func listAllowsSystem(system string, list []string) (bool, error) {
 	if len(list) == 0 {
 		return true, nil
 	}
+	numRemoved := 0
 	for _, name := range list {
 		add := strings.HasPrefix(name, "+")
 		remove := strings.HasPrefix(name, "-")
 		if remove {
+			numRemoved++
 			continue
 		}
 		if add {
@@ -973,6 +975,9 @@ func listAllowsSystem(system string, list []string) (bool, error) {
 		if matched {
 			return true, nil
 		}
+	}
+	if numRemoved == len(list) {
+		return true, nil
 	}
 	return false, nil
 }
