@@ -1054,6 +1054,14 @@ func (p *Project) Jobs(options *Options) ([]*Job, error) {
 				bvar := strmap{backend, backend.Variants}
 				bsys := strmap{backend, backend.systemNames()}
 
+				backendok, err := listAllowsString(bname, suite.Backends)
+				if err != nil {
+					return nil, err
+				}
+				if !backendok {
+					continue
+				}
+
 				systems, err := evalstr("systems", bsys, ssys, tsys)
 				if err != nil {
 					return nil, err
