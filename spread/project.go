@@ -950,8 +950,10 @@ func (p *Project) backendNames() []string {
 	return bnames
 }
 
-func listAllowsSystem(system string, list []string) (bool, error) {
+func listAllowsString(toCheck string, list []string) (bool, error) {
 	if len(list) == 0 {
+		// If the list of systems/backends to allow/disallow is empty,
+		// then consider everything allowed
 		return true, nil
 	}
 	numRemoved := 0
@@ -959,16 +961,21 @@ func listAllowsSystem(system string, list []string) (bool, error) {
 		add := strings.HasPrefix(name, "+")
 		remove := strings.HasPrefix(name, "-")
 		if remove {
+			matched, err := filepath.Match(name[1:], toCheck)
+			if err != nil {
+				return false, err
+			}
+			if matched {
+				// If the system/backend is explicitly disallowed, then we return false
+				return false, nil
+			}
 			numRemoved++
 			continue
 		}
 		if add {
 			name = name[1:]
 		}
-		if system == name {
-			return true, nil
-		}
-		matched, err := filepath.Match(name, system)
+		matched, err := filepath.Match(name, toCheck)
 		if err != nil {
 			return false, err
 		}
@@ -977,6 +984,8 @@ func listAllowsSystem(system string, list []string) (bool, error) {
 		}
 	}
 	if numRemoved == len(list) {
+		// The list contained only disallowed systems/backend and none of them
+		// matched toCheck. We can therefore allow this.
 		return true, nil
 	}
 	return false, nil
@@ -1056,7 +1065,7 @@ func (p *Project) Jobs(options *Options) ([]*Job, error) {
 					if system == nil {
 						continue
 					}
-					suiteok, err := listAllowsSystem(sysname, suite.Systems)
+					suiteok, err := listAllowsString(sysname, suite.Systems)
 					if err != nil {
 						return nil, err
 					}
