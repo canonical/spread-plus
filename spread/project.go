@@ -950,47 +950,6 @@ func (p *Project) backendNames() []string {
 	return bnames
 }
 
-func listAllowsString(toCheck string, list []string) (bool, error) {
-	if len(list) == 0 {
-		// If the list of systems/backends to allow/disallow is empty,
-		// then consider everything allowed
-		return true, nil
-	}
-	numRemoved := 0
-	for _, name := range list {
-		add := strings.HasPrefix(name, "+")
-		remove := strings.HasPrefix(name, "-")
-		if remove {
-			matched, err := filepath.Match(name[1:], toCheck)
-			if err != nil {
-				return false, err
-			}
-			if matched {
-				// If the system/backend is explicitly disallowed, then we return false
-				return false, nil
-			}
-			numRemoved++
-			continue
-		}
-		if add {
-			name = name[1:]
-		}
-		matched, err := filepath.Match(name, toCheck)
-		if err != nil {
-			return false, err
-		}
-		if matched {
-			return true, nil
-		}
-	}
-	if numRemoved == len(list) {
-		// The list contained only disallowed systems/backend and none of them
-		// matched toCheck. We can therefore allow this.
-		return true, nil
-	}
-	return false, nil
-}
-
 func (p *Project) Jobs(options *Options) ([]*Job, error) {
 	var jobs []*Job
 
@@ -1042,7 +1001,7 @@ func (p *Project) Jobs(options *Options) ([]*Job, error) {
 			tbke := strmap{task, task.Backends}
 			tsys := strmap{task, task.Systems}
 
-			backends, err := evalstr("backends", pbke, sbke, tbke)
+			backends, err := calculateSupport("backends", pbke, sbke, tbke)
 			if err != nil {
 				return nil, err
 			}
@@ -1054,15 +1013,7 @@ func (p *Project) Jobs(options *Options) ([]*Job, error) {
 				bvar := strmap{backend, backend.Variants}
 				bsys := strmap{backend, backend.systemNames()}
 
-				backendok, err := listAllowsString(bname, suite.Backends)
-				if err != nil {
-					return nil, err
-				}
-				if !backendok {
-					continue
-				}
-
-				systems, err := evalstr("systems", bsys, ssys, tsys)
+				systems, err := calculateSupport("systems", bsys, ssys, tsys)
 				if err != nil {
 					return nil, err
 				}
@@ -1071,13 +1022,6 @@ func (p *Project) Jobs(options *Options) ([]*Job, error) {
 					system := backend.Systems[sysname]
 					// not for us
 					if system == nil {
-						continue
-					}
-					suiteok, err := listAllowsString(sysname, suite.Systems)
-					if err != nil {
-						return nil, err
-					}
-					if !suiteok {
 						continue
 					}
 					yenv := envmap{system, system.Environment}
@@ -1394,6 +1338,118 @@ func matches(pattern string, strmaps ...strmap) ([]string, error) {
 		}
 	}
 	return matches, nil
+}
+
+// calculateSupport takes in input a list of strmap. It assumes the strmaps to be in order
+// from topmost level to bottommost level. It calculates the list of supported items by
+// assuming each layer operates in the context of the layers before. Therefore, the final list of
+// items is a subset of the first layer. All subsequent layers are also subsets of the ones
+// before, with the exception of whitelisted items. While a whitelisting may not add new items not
+// present in the first layer, it may add back systems that were removed in intermediate layers.
+// Ex: with input {"a","b","c"},{"-b"},{"b"}, the final list of items is {}
+// Ex: with input {"a","b","c"}.{"-b"},{"a"}, the final list of items is {"a"}
+// Ex: with input {"a","b","c"}.{},{"a"}, the final list of items is {"a"}
+// Ex: with input {"a","b","c"}.{"-b"},{"+b"}, the final list of items is {"a","b","c"}
+// Ex: with input {"a","b","c"}.{"+d"},{}, the final list of items is {"a","b","c"}
+func calculateSupport(what string, strmaps ...strmap) ([]string, error) {
+	final := make(map[string]bool)
+	for i, strmap := range strmaps {
+		delta := 0
+		plain := 0
+		levelMatches := map[string]bool{}
+		for _, name := range strmap.strings {
+			add := strings.HasPrefix(name, "+")
+			remove := strings.HasPrefix(name, "-")
+			if add || remove {
+				name = name[1:]
+				if i == 0 {
+					return nil, fmt.Errorf("%s specifies %s in delta format", strmap.context, what)
+				}
+				delta++
+			} else {
+				plain++
+			}
+			if delta > 0 && plain > 0 {
+				return nil, fmt.Errorf("%s specifies %s both in delta and plain format", strmap.context, what)
+			}
+			// We only want the non-globbed matches so here we only use the top-level
+			// names that, by definition, must not have globs.
+			matches, err := matches(name, strmaps[0])
+
+			if err != nil {
+				return nil, err
+			}
+
+			// Since add should add an item, even when layers above (all but the first) do not support it,
+			// add all matches here independently of where we are in the search. Note we cannot whitelist
+			// items that are not present at the first layer.
+			if add {
+				for _, match := range matches {
+					final[match] = true
+				}
+				continue
+			}
+			// Case when name starts with -
+			if remove {
+				for _, match := range matches {
+					delete(final, match)
+				}
+				continue
+			}
+
+			if i == 0 {
+				// This is the top layer so we start by adding all matches.
+				// The next layers will refine this set and will
+				// remove entries if a system is blacklisted down the line
+				// or if it is not declared for use at a given level.
+				for _, match := range matches {
+					final[match] = true
+				}
+			} else {
+				// Since this is not the first layer, we simply collect all matches.
+				// These are simple declarations so we know everything that is not
+				// declared at this layer must be removed.
+				for _, match := range matches {
+					levelMatches[match] = true
+				}
+			}
+		}
+
+		// The first iteration simply adds all its supported systems and moves on to the next layer
+		if i == 0 {
+			continue
+		}
+
+		// In subsequent iterations, in the plain case, if we had a list of supported items
+		// but no matches (due to lack of support in previous layers), then we have an empty
+		// list of items. There is no point in continuing further.
+		if len(strmap.strings) > 0 && len(levelMatches) == 0 && plain > 0 {
+			return []string{}, nil
+		}
+
+		if len(levelMatches) > 0 {
+			// Since we have declared exlusive support for items at this level,
+			// check items from previous levels. Any that are not in levelMatches
+			// get removed since they are not supported at this level.
+			for supported := range final {
+				_, ok := levelMatches[supported]
+				if !ok {
+					delete(final, supported)
+				}
+			}
+		}
+
+		// If there are no level matches, then either we have an empty set of supported systems,
+		// (in which case all items at previous levels are supported also at this level) or we've
+		// already removed/added items for the delta case. Either way, no need to do anything
+		// but proceed to the next layer.
+	}
+
+	strs := make([]string, 0, len(final))
+	for name := range final {
+		strs = append(strs, name)
+	}
+	return strs, nil
 }
 
 func evalstr(what string, strmaps ...strmap) ([]string, error) {
