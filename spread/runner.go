@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -556,29 +555,7 @@ func (r *Runner) run(client *Client, job *Job, verb string, context interface{},
 			start = time.Now()
 			output, err = client.Trace(debug, dir, job.Environment)
 			if err != nil {
-				// The serial output is saved in the logs directory if logs option is not empty
-				// Otherwise just an error message is displayed
-				outputMsg := err.Error()
-				if r.options.Logs != "" {
-					filename := job.Backend.Name + "_" + job.System.Name + "_" + strings.Replace(job.Task.Name, "/", "_", -1) + ".serial.log"
-					filepath := filepath.Join(r.options.Logs, filename)
-
-					// Check if same serial log was already saved in a previous stage
-					// in order to retrieve and save the serial output
-					_, err := os.Stat(filepath)
-					if err != nil && errors.Is(err, os.ErrNotExist) {
-						outputMsg = "serial output saved to file " + filepath
-						output, err := server.SerialOutput()
-						if err != nil {
-							printft(start, startTime|endTime|startFold|endFold, "Error retrieving serial output: %v", err)
-						}
-						err = saveLog(r.options.Logs, filename, []byte(output))
-						if err != nil {
-							printft(start, startTime|endTime|startFold|endFold, "Error saving serial output to file %s", filepath, err)
-						}
-					}
-				}
-				printft(start, startTime|endTime|startFold|endFold, "Error debugging %s (%s) : %v", contextStr, server.Label(), outputErr([]byte(outputMsg), nil))
+				printft(start, startTime|endTime|startFold|endFold, "Error debugging %s (%s) : %v", contextStr, server.Label(), err)
 			} else if len(output) > 0 {
 				if r.options.NoDebug {
 					outputMsg := "no output"
