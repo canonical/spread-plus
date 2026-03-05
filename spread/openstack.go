@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"sync"
@@ -249,7 +250,7 @@ func (s *openstackServer) Discard(ctx context.Context) error {
 const openstackCloudInitScript = `
 #cloud-config
 runcmd:
-  - echo root:%s | chpasswd
+  - echo 'root:%s' | chpasswd -e
   - sed -i 's/^\s*#\?\s*\(PermitRootLogin\|PasswordAuthentication\)\>.*/\1 yes/' /etc/ssh/sshd_config
   - sed -i 's/^PermitRootLogin=/#PermitRootLogin=/g' /etc/ssh/sshd_config.d/* || true
   - sed -i 's/^PasswordAuthentication=/#PasswordAuthentication=/g' /etc/ssh/sshd_config.d/* || true
@@ -266,6 +267,21 @@ const openstackNameLayout = "Jan021504.000000"
 const openstackDefaultFlavor = "m1.medium"
 
 var timeNow = time.Now
+
+func openstackEncryptPassword(password string) (string, error) {
+	cmd := exec.Command("openssl", "passwd", "-6", password)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("cannot generate SHA512 password hash with openssl: %w", err)
+	}
+
+	hashedPassword := strings.TrimSpace(string(out))
+	if !strings.HasPrefix(hashedPassword, "$6$") {
+		return "", fmt.Errorf("cannot generate SHA512 password hash with openssl: unexpected output %s", hashedPassword)
+	}
+
+	return hashedPassword, nil
+}
 
 func openstackName() string {
 	return strings.ToLower(strings.Replace(timeNow().UTC().Format(openstackNameLayout), ".", "-", 1))
@@ -731,8 +747,13 @@ func (p *openstackProvider) createMachine(ctx context.Context, system *System) (
 		return nil, err
 	}
 
+	encryptedPassword, err := openstackEncryptPassword(p.options.Password)
+	if err != nil {
+		return nil, fmt.Errorf("cannot encrypt password for openstack cloud-init: %v", err)
+	}
+
 	// cloud init script
-	cloudconfig := fmt.Sprintf(openstackCloudInitScript, p.options.Password)
+	cloudconfig := fmt.Sprintf(openstackCloudInitScript, encryptedPassword)
 
 	// tags to the created instance
 	tags := map[string]string{
