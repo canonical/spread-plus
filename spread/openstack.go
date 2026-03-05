@@ -240,6 +240,9 @@ func (p *openstackProvider) Allocate(ctx context.Context, system *System) (Serve
 }
 
 func (s *openstackServer) Discard(ctx context.Context) error {
+	if err := s.p.checkKey(); err != nil {
+		return err
+	}
 	return s.p.removeMachine(ctx, s)
 }
 
