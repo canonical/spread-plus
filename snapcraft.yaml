@@ -32,4 +32,6 @@ parts:
         source: .
         build-snaps:
           - go/1.24/stable
+        stage-packages:
+          - openssl
 
