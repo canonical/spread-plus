@@ -52,7 +52,7 @@ type CreatedAt struct {
 
 type TestFlingerRequestData struct {
 	Queue          string                      `json:"job_queue"`
-	ProvisionDdata TestFlingerProvisioningData `json:"provision_data"`
+	ProvisionDdata TestFlingerProvisioningData `json:"provision_data,omitempty"`
 	ReserveData    TestFlingerReserveData      `json:"reserve_data"`
 	AllocateData   TestFlingerAllocateData     `json:"allocate_data"`
 	Tags           []string                    `json:"tags"`
@@ -256,24 +256,27 @@ func (p *TestFlingerProvider) Allocate(ctx context.Context, system *System) (Ser
 }
 
 func (p *TestFlingerProvider) requestDevice(ctx context.Context, system *System) (*TestFlingerJob, error) {
-	image := system.Image
+
 	queue := TestFlingerQueue(system)
 
-	pdata := TestFlingerProvisioningData{Url: image}
-	// In case the image is a url, then the provisioning data is used with url,
-	// otherwise it is used with distro
-	_, err := url.ParseRequestURI(image)
-	if err != nil {
-		pdata = TestFlingerProvisioningData{Distro: image}
-	}
-
 	data := &TestFlingerRequestData{
-		Queue:          queue,
-		ProvisionDdata: pdata,
+		Queue: queue,
 		// Tags used are:
 		// 1. spread which is used to find the spread active jobs
 		// 2. halt-timeout=DURATION which is used to determine when a running job has to be cancelled
 		Tags: []string{"spread", "halt-timeout=" + p.backend.HaltTimeout.Duration.String()},
+	}
+
+	if system.Image != "" && system.Image != system.Name {
+		image := system.Image
+		pdata := TestFlingerProvisioningData{Url: image}
+		// In case the image is a url, then the provisioning data is used with url,
+		// otherwise it is used with distro
+		_, err := url.ParseRequestURI(image)
+		if err != nil {
+			pdata = TestFlingerProvisioningData{Distro: image}
+		}
+		data.ProvisionDdata = pdata
 	}
 
 	if system.ReserveKey != "" {
@@ -290,7 +293,7 @@ func (p *TestFlingerProvider) requestDevice(ctx context.Context, system *System)
 	}
 
 	var jobRes TestFlingerJobResponse
-	err = p.do("POST", "/job", data, &jobRes)
+	err := p.do("POST", "/job", data, &jobRes)
 
 	// First step is to get the job_id running the submit command
 	jobId := ""
