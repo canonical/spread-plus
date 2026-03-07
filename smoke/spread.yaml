@@ -116,6 +116,16 @@ backends:
                   workers: 1
                   username: ubuntu
                   password: ubuntu
+            - ubuntu-core-20-64-pune:
+                  queue: pune-001
+                  image: core20-latest-stable
+                  workers: 1
+                  username: ubuntu
+                  password: ubuntu
+            - ubuntu-server-jammy-rocm-radeon-pro-w7900:
+                queue: 202310-32276
+                username: ubuntu
+                password: ubuntu
 
 exclude:
     - .spread-reuse.yaml
