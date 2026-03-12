@@ -52,7 +52,7 @@ type CreatedAt struct {
 
 type TestFlingerRequestData struct {
 	Queue          string                      `json:"job_queue"`
-	ProvisionDdata TestFlingerProvisioningData `json:"provision_data"`
+	ProvisionDdata TestFlingerProvisioningData `json:"provision_data,omitempty"`
 	ReserveData    TestFlingerReserveData      `json:"reserve_data"`
 	AllocateData   TestFlingerAllocateData     `json:"allocate_data"`
 	Tags           []string                    `json:"tags"`
@@ -250,30 +250,34 @@ func (p *TestFlingerProvider) Allocate(ctx context.Context, system *System) (Ser
 				return nil, fmt.Errorf("error saving job result output: %v", err)
 			}
 		}
+		s.Discard(ctx)
 		return nil, err
 	}
 	return s, nil
 }
 
 func (p *TestFlingerProvider) requestDevice(ctx context.Context, system *System) (*TestFlingerJob, error) {
-	image := system.Image
+
 	queue := TestFlingerQueue(system)
 
-	pdata := TestFlingerProvisioningData{Url: image}
-	// In case the image is a url, then the provisioning data is used with url,
-	// otherwise it is used with distro
-	_, err := url.ParseRequestURI(image)
-	if err != nil {
-		pdata = TestFlingerProvisioningData{Distro: image}
-	}
-
 	data := &TestFlingerRequestData{
-		Queue:          queue,
-		ProvisionDdata: pdata,
+		Queue: queue,
 		// Tags used are:
 		// 1. spread which is used to find the spread active jobs
 		// 2. halt-timeout=DURATION which is used to determine when a running job has to be cancelled
 		Tags: []string{"spread", "halt-timeout=" + p.backend.HaltTimeout.Duration.String()},
+	}
+
+	if system.Image != "" && system.Image != system.Name {
+		image := system.Image
+		pdata := TestFlingerProvisioningData{Url: image}
+		// In case the image is a url, then the provisioning data is used with url,
+		// otherwise it is used with distro
+		_, err := url.ParseRequestURI(image)
+		if err != nil {
+			pdata = TestFlingerProvisioningData{Distro: image}
+		}
+		data.ProvisionDdata = pdata
 	}
 
 	if system.ReserveKey != "" {
@@ -290,7 +294,7 @@ func (p *TestFlingerProvider) requestDevice(ctx context.Context, system *System)
 	}
 
 	var jobRes TestFlingerJobResponse
-	err = p.do("POST", "/job", data, &jobRes)
+	err := p.do("POST", "/job", data, &jobRes)
 
 	// First step is to get the job_id running the submit command
 	jobId := ""
@@ -342,7 +346,7 @@ func (p *TestFlingerProvider) waitDeviceBoot(ctx context.Context, s *TestFlinger
 		}
 
 		// allocated stated means the ip for the device available
-		if state == ALLOCATED {
+		if state == ALLOCATED || state == RESERVE {
 			if resRes.DeviceInfo.DeviceIP != "" {
 				s.address = resRes.DeviceInfo.DeviceIP
 				if net.ParseIP(s.address) == nil {
@@ -376,7 +380,6 @@ func (p *TestFlingerProvider) waitDeviceBoot(ctx context.Context, s *TestFlinger
 		case <-warn.C:
 			printf("Job %s for device % s is in state %s", s.d.JobId, s.d.Name, state)
 		case <-timeout:
-			s.Discard(ctx)
 			return fmt.Errorf("wait timeout reached, job discarded")
 		}
 	}
@@ -387,18 +390,26 @@ func (p *TestFlingerProvider) getIpForReservedDevice(s *TestFlingerJob) (string,
 	retry := time.NewTicker(10 * time.Second)
 	defer retry.Stop()
 
+	// Define the endpoints to check
+	endpoints := []string{
+		"/result/" + s.d.JobId,
+		"/result/" + s.d.JobId + "/output",
+	}
+
+	// This regex is intended to match a string like
+	// ssh -o 'StrictHostKeyChecking=no' -o 'UserKnownHostsFile=/dev/null' '<user>@<ip>'
+	var re = regexp.MustCompile(`ssh .*?@([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)`)
 	for {
-		output, err := p.dop("GET", "/result/"+s.d.JobId+"/output", nil)
-		if err != nil {
-			return "", fmt.Errorf("error requesting results output for job: %v", err)
-		}
+		for _, path := range endpoints {
+			output, err := p.dop("GET", path, nil)
+			if err != nil {
+				return "", fmt.Errorf("error requesting %s: %v", path, err)
+			}
 
-		// It is supposed that the device status is reserve, so the ip is in the output
-		re := regexp.MustCompile(`ssh .*@([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)`)
-		match := re.FindStringSubmatch(output)
-
-		if len(match) > 1 {
-			return match[1], nil
+			match := re.FindStringSubmatch(output)
+			if len(match) > 1 {
+				return match[1], nil
+			}
 		}
 
 		select {
