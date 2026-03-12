@@ -1,0 +1,22 @@
+summary: Test suite systems
+
+prepare: |
+    if [ ! -f .spread-reuse.yaml ]; then
+        touch /run/spread-reuse.yaml
+        ln -s /run/spread-reuse.yaml .spread-reuse.yaml
+    fi
+
+debug: FAIL_CHECK=0 spread -list lxd:ubuntu-22.04
+
+execute: |
+    list="$(FAIL_CHECK=0 spread -list lxd:ubuntu-22.04)"
+    MATCH ":22/main" <<<"$list"
+    MATCH ":empty/main" <<<"$list"
+    MATCH ":not-24/main" <<<"$list"
+    NOMATCH ":24/main" <<<"$list"
+    NOMATCH ":not-22/main" <<<"$list"
+    
+    MATCH ":lxd/main" <<<"$list"
+    MATCH ":not-qemu/main" <<<"$list"
+    NOMATCH ":not-lxd/main" <<<"$list"
+    NOMATCH ":qemu/main" <<<"$list"
