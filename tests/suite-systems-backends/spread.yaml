@@ -1,0 +1,57 @@
+project: spread
+
+backends:
+    lxd:
+        systems:
+            - ubuntu-22.04
+    openstack:
+        systems:
+            - ubuntu-24.04
+
+path: /home/test
+
+suites:
+    24/:
+        summary: Verification tasks.
+        systems:
+            - ubuntu-24.*
+
+    not-24/:
+        summary: Verification tasks.
+        systems:
+            - -ubuntu-24.*
+
+    not-22/:
+        summary: Verification tasks.
+        systems:
+            - -ubuntu-22.04
+
+    22/:
+        summary: Verification tasks.
+        systems:
+            - ubuntu-22.04
+
+    empty/:
+        summary: Verification tasks.
+
+    qemu/:
+        summary: Verification tasks.
+        backends:
+            - qemu
+
+    not-qemu/:
+        summary: Verification tasks.
+        backends:
+            - -qemu
+
+    lxd/:
+        summary: Verification tasks.
+        backends:
+            - lxd
+
+    not-lxd/:
+        summary: Verification tasks.
+        backends:
+            - -lxd
+
+# vim:ts=4:sw=4:et
