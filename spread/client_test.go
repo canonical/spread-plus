@@ -8,7 +8,7 @@ import (
 
 	. "gopkg.in/check.v1"
 
-	"github.com/snapcore/spread/spread"
+	"github.com/canonical/spread-plus/spread"
 )
 
 type clientSuite struct{}

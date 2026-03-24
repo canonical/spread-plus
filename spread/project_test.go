@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/snapcore/spread/spread"
+	"github.com/canonical/spread-plus/spread"
 
 	. "gopkg.in/check.v1"
 	"gopkg.in/yaml.v2"

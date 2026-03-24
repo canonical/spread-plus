@@ -49,7 +49,7 @@ exclude:
     - tests/.spread-reuse.yaml
     - $CACHE_DISABLED
 
-path: /home/test/src/github.com/snapcore/spread
+path: /home/test/src/github.com/canonical/spread-plus
 
 kill-timeout: 10m
 warn-timeout: 2m
