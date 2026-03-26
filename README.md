@@ -118,7 +118,7 @@ backend:system:suite/task:variant
 Please install `spread` using Go install method:
 
 ```shell
-go install github.com/snapcore/spread/cmd/spread@latest
+go install github.com/canonical/spread-plus/cmd/spread@latest
 ```
 
 <a name="hello-world"/>
