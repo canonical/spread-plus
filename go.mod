@@ -1,8 +1,6 @@
 module github.com/canonical/spread-plus
 
-go 1.24.0
-
-toolchain go1.24.3
+go 1.25.0
 
 require (
 	github.com/go-goose/goose/v5 v5.0.0-20230421180421-abaee9096e3a
@@ -10,7 +8,7 @@ require (
 	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e
 	golang.org/x/crypto v0.36.0
 	golang.org/x/net v0.38.0
-	golang.org/x/oauth2 v0.0.0-20210628180205-a41e5a781914
+	golang.org/x/oauth2 v0.36.0
 	golang.org/x/term v0.30.0
 	golang.org/x/text v0.31.0
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c
