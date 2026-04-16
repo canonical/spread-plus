@@ -757,10 +757,9 @@ func (p *openstackProvider) createMachine(ctx context.Context, system *System) (
 
 	// tags to the created instance
 	tags := map[string]string{
-		"spread":   "true",
-		"owner":    strings.ToLower(username()),
-		"reuse":    strconv.FormatBool(p.options.Reuse),
-		"password": p.options.Password,
+		"spread": "true",
+		"owner":  strings.ToLower(username()),
+		"reuse":  strconv.FormatBool(p.options.Reuse),
 	}
 
 	// halt-timeout is added to the server to determine the time when it
