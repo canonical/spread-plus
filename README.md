@@ -121,6 +121,19 @@ Please install `spread` using Go install method:
 go install github.com/canonical/spread-plus/cmd/spread@latest
 ```
 
+Check the installed binary version with:
+
+```shell
+spread --version
+```
+
+When building from source, set the version string explicitly:
+
+```shell
+go build -ldflags "-X main.version=$(git describe --tags --always --dirty)" -o spread-plus ./cmd/spread
+./spread-plus --version
+```
+
 <a name="hello-world"/>
 
 ## Hello world

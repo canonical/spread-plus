@@ -29,7 +29,8 @@ jobs:
 
     - name: Build spread
       run: |
-          GOARCH="${{ matrix.arch }}" go build -o spread-plus cmd/spread/main.go
+          SPREAD_VERSION="$(date -u +%Y.%m.%d)"
+          GOARCH="${{ matrix.arch }}" go build -ldflags "-X main.version=${SPREAD_VERSION}" -o spread-plus cmd/spread/main.go
 
     - name: Upload spread binary to cache
       uses: actions/upload-artifact@v4
