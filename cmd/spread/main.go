@@ -11,11 +11,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/niemeyer/pretty"
 	"github.com/canonical/spread-plus/spread"
+	"github.com/niemeyer/pretty"
 )
 
 var (
+	version        = "dev"
+	showVersion    = flag.Bool("version", false, "Show spread version")
 	verbose        = flag.Bool("v", false, "Show detailed progress information")
 	vverbose       = flag.Bool("vv", false, "Show debugging messages as well")
 	list           = flag.Bool("list", false, "Just show list of jobs that would run")
@@ -53,6 +55,10 @@ func main() {
 func run() error {
 	mrand.Seed(time.Now().UnixNano())
 	flag.Parse()
+	if *showVersion {
+		fmt.Println(version)
+		return nil
+	}
 
 	spread.Logger = log.New(os.Stdout, "", 0)
 	spread.Verbose = *verbose

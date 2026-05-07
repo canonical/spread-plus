@@ -1,5 +1,5 @@
 name: spread-plus
-version: 2026.01.20
+version: 2026.05.07
 summary: Convenient full-system test (task) distribution
 description: |
     Spread Plus is a fork of Spread created to serve as a development and experimentation
@@ -30,6 +30,9 @@ parts:
     spread-plus:
         plugin: go
         source: .
+        override-build: |
+          craftctl default
+          go build -ldflags "-X main.version=${CRAFT_PROJECT_VERSION}" -o "$CRAFT_PART_INSTALL/bin/spread" ./cmd/spread
         build-snaps:
           - go/1.24/stable
         stage-packages:
