@@ -23,9 +23,6 @@ backends:
         halt-timeout: 2h
         wait-timeout: 5m
         groups: [default]
-        proxy: ingress-haproxy.ps7.canonical.com
-        cidr-port-rel: [10.151.96.0/21:5000]
-        volume-auto-delete: true
         environment:
             HTTP_PROXY: 'http://egress.ps7.internal:3128'
             HTTPS_PROXY: 'http://egress.ps7.internal:3128'
@@ -86,9 +83,6 @@ backends:
         halt-timeout: 2h
         wait-timeout: 5m
         groups: [default]
-        proxy: ingress-haproxy.ps7.canonical.com
-        cidr-port-rel: [10.151.89.0/24:8000]
-        volume-auto-delete: true
         environment:
             HTTP_PROXY: 'http://egress.ps7.internal:3128'
             HTTPS_PROXY: 'http://egress.ps7.internal:3128'
