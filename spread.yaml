@@ -28,6 +28,8 @@ backends:
         plan: shared.small
         halt-timeout: 2h
         wait-timeout: 10m
+        proxy: ingress-haproxy.ps7.canonical.com
+        cidr-port-rel: [10.151.54.0/24:4000]
         groups: [default]
         environment: &openstack-env
             HTTP_PROXY: 'http://egress.ps7.internal:3128'
