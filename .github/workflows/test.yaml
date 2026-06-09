@@ -240,7 +240,7 @@ jobs:
   upload:
     name: Upload binary to GCE
     runs-on: ubuntu-latest
-    needs: [integration-tests, smoke-tests-google, smoke-tests-openstack-amd64, smoke-tests-openstack-arm64]
+    needs: [integration-tests, smoke-tests-openstack-amd64, smoke-tests-openstack-arm64]
     strategy:
       matrix:
         arch: [amd64, arm64]
