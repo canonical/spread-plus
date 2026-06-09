@@ -618,7 +618,7 @@ func (p *openstackProvider) updateAddressIfProxyDefined(ctx context.Context, s *
 	}
 
 	if canReachDirectSSH(ctx, s.address, openstackDirectSSHProbeTimeout) {
-		printf("Server reachable directly via SSH at %s; skipping proxy address mapping", s.address)
+		printf("Server reachable directly via SSH, skipping proxy mapping (%s)", s)
 		return nil
 	}
 
