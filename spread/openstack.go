@@ -574,6 +574,29 @@ func (p *openstackProvider) waitProvision(ctx context.Context, s *openstackServe
 
 var openstackServerBootTimeout = 5 * time.Minute
 var openstackServerBootRetry = 5 * time.Second
+var openstackDirectSSHProbeTimeout = 3 * time.Second
+
+func canReachDirectSSH(ctx context.Context, address string, timeout time.Duration) bool {
+	if net.ParseIP(address) == nil {
+		return false
+	}
+
+	dialCtx := ctx
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		var cancel context.CancelFunc
+		dialCtx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
+
+	dialer := net.Dialer{Timeout: timeout}
+	conn, err := dialer.DialContext(dialCtx, "tcp", net.JoinHostPort(address, "22"))
+	if err != nil {
+		debugf("Direct SSH probe to %s failed: %v", address, err)
+		return false
+	}
+	_ = conn.Close()
+	return true
+}
 
 func countIPsBetween(initialIp net.IP, finalIp net.IP) (uint32, error) {
 	ip1Int := binary.BigEndian.Uint32(initialIp.To4())
@@ -591,6 +614,11 @@ func (p *openstackProvider) updateAddressIfProxyDefined(ctx context.Context, s *
 			return fmt.Errorf("cidr and port relation is required when proxy is defined")
 		}
 	} else {
+		return nil
+	}
+
+	if canReachDirectSSH(ctx, s.address, openstackDirectSSHProbeTimeout) {
+		printf("Server reachable directly via SSH, skipping proxy mapping (%s)", s.d.Name)
 		return nil
 	}
 

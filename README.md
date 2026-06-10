@@ -1198,6 +1198,8 @@ When access to the VM must go through a proxy, the proxy configuration should be
 
 To configure the IP-port mapping, use the cidr-port-rel key. This requires a list of entries in the format "CIDR:initial-port". Based on this list, the system will assign a port by matching the allocated IP with the corresponding CIDR and applying the specified initial port.
 
+In order to allow reusing a backend definitions, the proxy configuration is not used by spread when it can ssh directly to the destination IP address. 
+
 <a name="linode"/>
 
 ## Linode backend
