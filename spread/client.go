@@ -680,7 +680,7 @@ func (c *Client) Send(from, to string, include, exclude []string) error {
 
 	var stdout safeBuffer
 	session.Stdout = &stdout
-	rcmd := fmt.Sprintf(`%s/bin/bash -c "mkdir -p '%s' && cd '%s' && /bin/tar -xz 2>&1"`, c.sudo(), to, to)
+	rcmd := fmt.Sprintf(`%s/bin/bash -c "mkdir -p '%s' && cd '%s' && /bin/tar --no-same-owner -xz 2>&1"`, c.sudo(), to, to)
 	err = c.runCommand(session, rcmd, &stdout, nil)
 	if err != nil {
 		return outputErr(stdout.Bytes(), err)
@@ -710,7 +710,7 @@ func (c *Client) SendTar(tar io.Reader, unpackDir string) error {
 	var stdout safeBuffer
 	session.Stdin = tar
 	session.Stdout = &stdout
-	cmd := fmt.Sprintf(`%s/bin/bash -c "mkdir -p '%s' && cd '%s' && /bin/tar xz 2>&1"`, c.sudo(), unpackDir, unpackDir)
+	cmd := fmt.Sprintf(`%s/bin/bash -c "mkdir -p '%s' && cd '%s' && /bin/tar --no-same-owner -xz 2>&1"`, c.sudo(), unpackDir, unpackDir)
 	err = c.runCommand(session, cmd, &stdout, nil)
 	if err != nil {
 		return outputErr(stdout.Bytes(), err)
