@@ -143,6 +143,11 @@ type System struct {
 	Queue      string
 	ReserveKey string `yaml:"reserve-key"`
 
+	// Only for Testflinger so far. Arbitrary provision_data passed
+	// through to the Testflinger device connector for the target queue.
+	// When set, it fully replaces the image-derived provision_data.
+	ProvisionData map[string]interface{} `yaml:"provision-data"`
+
 	// Only for Testflinger and Openstack so far.
 	WaitTimeout Timeout `yaml:"wait-timeout"`
 
