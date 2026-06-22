@@ -520,6 +520,18 @@ func (p *TestFlingerProvider) do(method, subpath string, params interface{}, res
 			}
 			// When the result is a string, the data is just copied
 			if err != nil {
+				// A non-JSON body (e.g. an HTML error, login or proxy page)
+				// usually means the TestFlinger endpoint could not be reached
+				// as expected, rather than a malformed API response.
+				if !json.Valid(data) {
+					snippet := strings.TrimSpace(string(data))
+					if len(snippet) > 200 {
+						snippet = snippet[:200] + "..."
+					}
+					return fmt.Errorf("TestFlinger endpoint %q returned a non-JSON response (HTTP %d); "+
+						"check that the server is reachable and that TF_ENDPOINT is correct: %s",
+						url, resp.StatusCode, snippet)
+				}
 				return err
 			}
 		}
