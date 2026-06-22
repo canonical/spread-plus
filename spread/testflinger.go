@@ -518,8 +518,20 @@ func (p *TestFlingerProvider) do(method, subpath string, params interface{}, res
 			if err != nil && resp.StatusCode == 404 {
 				return errTestFlingerNotFound
 			}
-			// When the result is a string, the data is just copied
+			// If unmarshalling fails, surface a more actionable error when the body isn't JSON
+			// (e.g. an HTML error/login/proxy page), which often indicates the endpoint
+			// wasn't reached as expected rather than a malformed API response.
 			if err != nil {
+
+				if !json.Valid(data) {
+					snippet := strings.TrimSpace(string(data))
+					if len(snippet) > 200 {
+						snippet = snippet[:200] + "..."
+					}
+					return fmt.Errorf("TestFlinger endpoint %q returned a non-JSON response (HTTP %d); "+
+						"check that the server is reachable and that TF_ENDPOINT is correct: %s",
+						url, resp.StatusCode, snippet)
+				}
 				return err
 			}
 		}
