@@ -15,7 +15,9 @@ func (s *TestFlingerSuite) TestBuildProvisionDataImageURL(c *C) {
 		Name:  "ubuntu-classic",
 		Image: "https://example.com/ubuntu.img.xz",
 	}
-	c.Assert(spread.BuildProvisionData(system), DeepEquals, map[string]interface{}{
+	pdata, err := spread.BuildProvisionData(system)
+	c.Assert(err, IsNil)
+	c.Assert(pdata, DeepEquals, map[string]interface{}{
 		"url": "https://example.com/ubuntu.img.xz",
 	})
 }
@@ -25,7 +27,9 @@ func (s *TestFlingerSuite) TestBuildProvisionDataImageDistro(c *C) {
 		Name:  "ubuntu-classic",
 		Image: "core22-latest-stable",
 	}
-	c.Assert(spread.BuildProvisionData(system), DeepEquals, map[string]interface{}{
+	pdata, err := spread.BuildProvisionData(system)
+	c.Assert(err, IsNil)
+	c.Assert(pdata, DeepEquals, map[string]interface{}{
 		"distro": "core22-latest-stable",
 	})
 }
@@ -35,14 +39,18 @@ func (s *TestFlingerSuite) TestBuildProvisionDataNoImage(c *C) {
 		Name:  "ubuntu-classic",
 		Image: "ubuntu-classic",
 	}
-	c.Assert(spread.BuildProvisionData(system), IsNil)
+	pdata, err := spread.BuildProvisionData(system)
+	c.Assert(err, IsNil)
+	c.Assert(pdata, IsNil)
 }
 
 func (s *TestFlingerSuite) TestBuildProvisionDataEmptyImage(c *C) {
 	system := &spread.System{
 		Name: "ubuntu-classic",
 	}
-	c.Assert(spread.BuildProvisionData(system), IsNil)
+	pdata, err := spread.BuildProvisionData(system)
+	c.Assert(err, IsNil)
+	c.Assert(pdata, IsNil)
 }
 
 func (s *TestFlingerSuite) TestBuildProvisionDataExplicit(c *C) {
@@ -55,10 +63,12 @@ func (s *TestFlingerSuite) TestBuildProvisionDataExplicit(c *C) {
 		Name:          "ubuntu-classic",
 		ProvisionData: provisionData,
 	}
-	c.Assert(spread.BuildProvisionData(system), DeepEquals, provisionData)
+	pdata, err := spread.BuildProvisionData(system)
+	c.Assert(err, IsNil)
+	c.Assert(pdata, DeepEquals, provisionData)
 }
 
-func (s *TestFlingerSuite) TestBuildProvisionDataExplicitReplacesImage(c *C) {
+func (s *TestFlingerSuite) TestBuildProvisionDataImageAndProvisionDataFails(c *C) {
 	provisionData := map[string]interface{}{
 		"url":          "https://example.com/override.img.xz",
 		"token_file":   "/run/token",
@@ -69,6 +79,8 @@ func (s *TestFlingerSuite) TestBuildProvisionDataExplicitReplacesImage(c *C) {
 		Image:         "https://example.com/ignored.img.xz",
 		ProvisionData: provisionData,
 	}
-	// The explicit provision-data fully replaces the image shorthand.
-	c.Assert(spread.BuildProvisionData(system), DeepEquals, provisionData)
+	// Setting both image and provision-data is ambiguous and must fail.
+	pdata, err := spread.BuildProvisionData(system)
+	c.Assert(pdata, IsNil)
+	c.Assert(err, ErrorMatches, "system ubuntu-classic sets both image and provision-data; set only one")
 }

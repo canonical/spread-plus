@@ -263,7 +263,11 @@ func (p *TestFlingerProvider) requestDevice(ctx context.Context, system *System)
 		Tags: []string{"spread", "halt-timeout=" + p.backend.HaltTimeout.Duration.String()},
 	}
 
-	if pdata := buildProvisionData(system); len(pdata) > 0 {
+	pdata, err := buildProvisionData(system)
+	if err != nil {
+		return nil, err
+	}
+	if len(pdata) > 0 {
 		data.ProvisionData = pdata
 	}
 
@@ -281,7 +285,7 @@ func (p *TestFlingerProvider) requestDevice(ctx context.Context, system *System)
 	}
 
 	var jobRes TestFlingerJobResponse
-	err := p.do("POST", "/job", data, &jobRes)
+	err = p.do("POST", "/job", data, &jobRes)
 
 	// First step is to get the job_id running the submit command
 	jobId := ""
@@ -449,27 +453,27 @@ func TestFlingerQueue(system *System) string {
 
 // buildProvisionData returns the provision_data block sent to Testflinger for
 // the given system. When the system defines an explicit provision-data map it
-// is used as-is, fully replacing the image shorthand; if an image is also set
-// a warning is emitted noting that it is ignored. Otherwise the image is mapped
-// to a url (when it parses as a URL) or a distro.
-func buildProvisionData(system *System) map[string]interface{} {
+// is used as-is, fully replacing the image shorthand. Setting both image and
+// provision-data is ambiguous and is rejected with an error. Otherwise the
+// image is mapped to a url (when it parses as a URL) or a distro.
+func buildProvisionData(system *System) (map[string]interface{}, error) {
 	if len(system.ProvisionData) > 0 {
 		if system.Image != "" && system.Image != system.Name {
-			printf("WARNING: System %s sets both image and provision-data; ignoring image %q", system.Name, system.Image)
+			return nil, fmt.Errorf("system %s sets both image and provision-data; set only one", system.Name)
 		}
-		return system.ProvisionData
+		return system.ProvisionData, nil
 	}
 
 	if system.Image == "" || system.Image == system.Name {
-		return nil
+		return nil, nil
 	}
 
 	// In case the image is a url, then the provisioning data is used with
 	// url, otherwise it is used with distro.
 	if _, err := url.ParseRequestURI(system.Image); err == nil {
-		return map[string]interface{}{"url": system.Image}
+		return map[string]interface{}{"url": system.Image}, nil
 	}
-	return map[string]interface{}{"distro": system.Image}
+	return map[string]interface{}{"distro": system.Image}, nil
 }
 
 func getTestflingerUrl(subpath string) string {

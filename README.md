@@ -1378,8 +1378,8 @@ backends:
                       token_file: /run/token
 ```
 
-When both `image` and `provision-data` are set for the same system, `provision-data` fully
-replaces the image shorthand and spread emits a warning noting that `image` is ignored.
+When both `image` and `provision-data` are set for the same system, spread fails with an
+error, since the intended provisioning input is ambiguous. Set only one of them.
 
 When the machines terminate running, they will be free. If anything
 happens that prevents the immediate removal, they will remain in the account
