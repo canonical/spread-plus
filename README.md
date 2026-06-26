@@ -1345,6 +1345,42 @@ allocation.
 Each testflinger system needs to be configured with a queue which is used to identify a set of
 devices and an image which is used by testflinger to provision the device once it is allocated.
 
+The `image` field is a shorthand for the most common provisioning cases: if its value is a URL
+it is sent to testflinger as `provision_data.url`, otherwise it is sent as `provision_data.distro`.
+
+For provisioning methods that need more than a single url or distro, use the `provision-data`
+field instead. Its contents are passed through verbatim as the testflinger job's `provision_data`,
+so any keys understood by the device connector serving the target queue can be supplied. The
+provisioning method itself is selected by the queue/agent, not by spread, so make sure the queue
+you target is backed by an agent configured for the connector you need.
+
+_$PROJECT/spread.yaml_
+```
+backends:
+    testflinger:
+        wait-timeout: 30m
+        systems:
+            # MAAS-style provisioning with extra connector keys.
+            - ubuntu-baremetal:
+                  queue: baremetal-pool
+                  provision-data:
+                      distro: jammy
+                      kernel: hwe-22.04
+                      user_data: |
+                          #cloud-config
+                          packages:
+                              - build-essential
+            # Image-url provisioning with connector-specific keys.
+            - ubuntu-oem:
+                  queue: oem-pool
+                  provision-data:
+                      url: https://url/image.img.xz
+                      token_file: /run/token
+```
+
+When both `image` and `provision-data` are set for the same system, spread fails with an
+error, since the intended provisioning input is ambiguous. Set only one of them.
+
 When the machines terminate running, they will be free. If anything
 happens that prevents the immediate removal, they will remain in the account
 and need to be removed by hand.
