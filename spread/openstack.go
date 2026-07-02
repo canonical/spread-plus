@@ -562,7 +562,7 @@ func (p *openstackProvider) waitProvision(ctx context.Context, s *openstackServe
 					if server.Status != nova.StatusError || server.Fault == nil {
 						return fmt.Errorf("cannot use server with status %s", server.Status)
 					}
-					return fmt.Errorf(server.Fault.Message)
+					return fmt.Errorf("%s", server.Fault.Message)
 				}
 				return nil
 			}
@@ -696,9 +696,7 @@ func (p *openstackProvider) waitServerBoot(ctx context.Context, s *openstackServ
 	printf("Waiting for %s to boot at %s...", s, s.address)
 	err := p.waitServerBootSerial(ctx, s)
 	if err != nil {
-		if !errors.Is(err, openstackSerialConsoleErr) {
-			return err
-		}
+		return err
 	}
 	return nil
 }

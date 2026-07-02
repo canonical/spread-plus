@@ -13,7 +13,6 @@ import (
 	goosehttp "github.com/go-goose/goose/v5/http"
 	"github.com/go-goose/goose/v5/identity"
 	"github.com/go-goose/goose/v5/nova"
-	"golang.org/x/crypto/ssh"
 
 	"github.com/canonical/spread-plus/spread"
 
@@ -26,6 +25,10 @@ func newOpenstackProvider() spread.Provider {
 	opts := &spread.Options{}
 
 	return spread.Openstack(prj, b, opts)
+}
+
+func newOpenstack() spread.Provider {
+	return newOpenstackProvider()
 }
 
 func newOpenstackServer(provider spread.Provider) spread.Provider {
@@ -122,7 +125,7 @@ func (cc *fakeNovaComputeClient) ListServersDetail(filter *nova.Filter) ([]nova.
 }
 
 func (cc *fakeNovaComputeClient) ListVolumeAttachments(serverId string) ([]nova.VolumeAttachment, error) {
-	return cc.ListVolumeAttachments(serverId)
+	return cc.listVolumeAttachments(serverId)
 }
 
 func (cc *fakeNovaComputeClient) RunServer(opts nova.RunServerOpts) (*nova.Entity, error) {
@@ -236,6 +239,12 @@ func (s *openstackFindImageSuite) SetUpTest(c *C) {
 	c.Assert(s.opst, NotNil)
 	s.fakeImageClient = &fakeGlanceImageClient{}
 	s.fakeComputeClient = &fakeNovaComputeClient{}
+	s.fakeComputeClient.getServer = func(serverId string) (*nova.ServerDetail, error) {
+		return &nova.ServerDetail{Id: serverId}, nil
+	}
+	s.fakeComputeClient.listVolumeAttachments = func(serverId string) ([]nova.VolumeAttachment, error) {
+		return nil, nil
+	}
 	s.fakeOsClient = &fakeOsAuthenticatingClient{}
 
 	spread.MockOpenstackImageClient(s.opst, s.fakeImageClient)
@@ -256,7 +265,7 @@ func (s *openstackFindImageSuite) TestOpenstackFindImageErrors(c *C) {
 	s.fakeImageClient.err = fmt.Errorf("boom")
 
 	_, err := spread.OpenstackFindImage(s.opst, "ubuntu-22.04-64")
-	c.Check(err, ErrorMatches, `cannot retrieve images list: boom`)
+	c.Check(err, ErrorMatches, `cannot get the active images list: cannot retrieve images list: boom`)
 }
 
 func uuid() string {
@@ -281,7 +290,7 @@ func makeGlanceImageDetails(imgs []string) []glance.ImageDetail {
 				created = t.Format(time.RFC3339)
 			}
 		}
-		out[i] = glance.ImageDetail{Id: id, Name: name, Created: created}
+		out[i] = glance.ImageDetail{Id: id, Name: name, Created: created, Status: spread.ACTIVE}
 	}
 	return out
 }
@@ -459,52 +468,4 @@ func (s *openstackFindImageSuite) TestOpenstackWaitServerBootSerialTimeout(c *C)
 
 	err := spread.OpenstackWaitServerBoot(s.opst, context.TODO(), "test-id", "test-server", []string{"net-1"})
 	c.Check(err, ErrorMatches, "cannot find ready marker in console output for test-server: timeout reached")
-}
-
-func (s *openstackFindImageSuite) TestOpenstackWaitServerBootSSHHappy(c *C) {
-	count := 0
-	spread.MockSshDial(func(network, addr string, config *ssh.ClientConfig) (*ssh.Client, error) {
-		count++
-		switch count {
-		case 1:
-			return nil, errors.New("connection error")
-		case 2:
-			return &ssh.Client{}, nil
-		}
-		c.Fatalf("should not reach here")
-		return nil, nil
-	})
-
-	restore := spread.MockOpenstackServerBootTimeout(100*time.Millisecond, time.Nanosecond)
-	defer restore()
-	restore = spread.MockOpenstackSerialOutputTimeout(50 * time.Millisecond)
-	defer restore()
-
-	// force fallback to SSH
-	s.fakeOsClient.err = fmt.Errorf("serial not supported")
-
-	s.server.serialOutput = func() (string, error) {
-		return "", nil
-	}
-
-	err := spread.OpenstackWaitServerBoot(s.opst, context.TODO(), "test-id", "", []string{"net-1"})
-	c.Check(err, IsNil)
-	c.Check(count, Equals, 2)
-}
-
-func (s *openstackFindImageSuite) TestOpenstackWaitServerBootSSHTimeout(c *C) {
-	spread.MockSshDial(func(network, addr string, config *ssh.ClientConfig) (*ssh.Client, error) {
-		return nil, errors.New("connection error")
-	})
-
-	restore := spread.MockOpenstackServerBootTimeout(100*time.Millisecond, time.Nanosecond)
-	defer restore()
-	restore = spread.MockOpenstackSerialOutputTimeout(50 * time.Millisecond)
-	defer restore()
-
-	// force fallback to SSH
-	s.fakeOsClient.err = fmt.Errorf("serial not supported")
-
-	err := spread.OpenstackWaitServerBoot(s.opst, context.TODO(), "test-id", "test-server", []string{"net-1"})
-	c.Check(err, ErrorMatches, "cannot connect to server test-server: cannot ssh to the allocated instance: timeout reached")
 }
