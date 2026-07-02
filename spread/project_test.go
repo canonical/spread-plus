@@ -318,3 +318,35 @@ func (s *projectSuite) TestSupportedBackendsSuitesLessRestrictiveThanTask(c *C) 
 	c.Assert(err, IsNil)
 	c.Assert(len(jobs), Equals, 2)
 }
+
+func (s *projectSuite) TestFilterRunsBeforeEnvEvaluation(c *C) {
+	project := spread.Project{
+		RemotePath: "/remote/path",
+		Backends: map[string]*spread.Backend{
+			"lxd": {
+				Name: "lxd",
+				Systems: spread.SystemsMap{
+					"ubuntu-22.04": &spread.System{Name: "ubuntu-22.04"},
+				},
+			},
+		},
+		Suites: map[string]*spread.Suite{
+			"suite/": {
+				Tasks: map[string]*spread.Task{
+					"task": {
+						Suite:       "suite/",
+						Name:        "suite/task",
+						Samples:     1,
+						Environment: spread.NewEnvironment("BROKEN", "$(HOST:false)"),
+					},
+				},
+			},
+		},
+	}
+
+	filter, err := spread.NewFilter([]string{"does-not-match"})
+	c.Assert(err, IsNil)
+
+	_, err = project.Jobs(&spread.Options{Filter: filter})
+	c.Assert(err, ErrorMatches, "nothing matches provider filter")
+}

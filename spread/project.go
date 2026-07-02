@@ -1047,7 +1047,23 @@ func (p *Project) Jobs(options *Options) ([]*Job, error) {
 						}
 
 						for sample := 1; sample <= task.Samples; sample++ {
+							jobName := fmt.Sprintf("%s:%s:%s", backend.Name, system.Name, task.Name)
+							if variant != "" {
+								jobName = fmt.Sprintf("%s:%s", jobName, variant)
+							}
+							if task.Samples > 1 {
+								jobName += "#" + strconv.Itoa(sample)
+							}
+
+							if options.Filter != nil {
+								filterJob := Job{Name: jobName, Sample: sample}
+								if !options.Filter.Pass(&filterJob) {
+									continue
+								}
+							}
+
 							job := &Job{
+								Name:     jobName,
 								Project:  p,
 								Backend:  backend,
 								System:   system,
@@ -1056,14 +1072,6 @@ func (p *Project) Jobs(options *Options) ([]*Job, error) {
 								Variant:  variant,
 								Sample:   sample,
 								Priority: priority,
-							}
-							if job.Variant == "" {
-								job.Name = fmt.Sprintf("%s:%s:%s", job.Backend.Name, job.System.Name, job.Task.Name)
-							} else {
-								job.Name = fmt.Sprintf("%s:%s:%s:%s", job.Backend.Name, job.System.Name, job.Task.Name, job.Variant)
-							}
-							if task.Samples > 1 {
-								job.Name += "#" + strconv.Itoa(sample)
 							}
 
 							sprenv := envmap{stringer("$SPREAD_*"), NewEnvironment(
@@ -1083,10 +1091,6 @@ func (p *Project) Jobs(options *Options) ([]*Job, error) {
 								return nil, err
 							}
 							job.Environment = env.Variant(variant)
-
-							if options.Filter != nil && !options.Filter.Pass(job) {
-								continue
-							}
 
 							jobs = append(jobs, job)
 
