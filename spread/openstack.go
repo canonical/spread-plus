@@ -562,7 +562,7 @@ func (p *openstackProvider) waitProvision(ctx context.Context, s *openstackServe
 					if server.Status != nova.StatusError || server.Fault == nil {
 						return fmt.Errorf("cannot use server with status %s", server.Status)
 					}
-					return fmt.Errorf(server.Fault.Message)
+					return fmt.Errorf("%s", server.Fault.Message)
 				}
 				return nil
 			}

@@ -93,8 +93,16 @@ func OpenstackWaitProvision(p Provider, ctx context.Context, serverID, serverNam
 	return opst.waitProvision(ctx, server)
 }
 
-func OpenstackWaitServerBoot(p Provider, server openstackServer, ctx context.Context, serverID, serverName string, serverNetworks []string) error {
+func OpenstackWaitServerBoot(p Provider, ctx context.Context, serverID, serverName string, serverNetworks []string) error {
 	opst := p.(*openstackProvider)
+	server := &openstackServer{
+		p: opst,
+		d: openstackServerData{
+			Id:       serverID,
+			Name:     serverName,
+			Networks: serverNetworks,
+		},
+	}
 
 	return opst.waitServerBoot(ctx, server)
 }
