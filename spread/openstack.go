@@ -696,7 +696,9 @@ func (p *openstackProvider) waitServerBoot(ctx context.Context, s *openstackServ
 	printf("Waiting for %s to boot at %s...", s, s.address)
 	err := p.waitServerBootSerial(ctx, s)
 	if err != nil {
-		return err
+		if !errors.Is(err, openstackSerialConsoleErr) {
+			return err
+		}
 	}
 	return nil
 }

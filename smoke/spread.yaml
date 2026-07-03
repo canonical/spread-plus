@@ -24,7 +24,7 @@ backends:
         wait-timeout: 5m
         groups: [default]
         proxy: ingress-haproxy.ps7.canonical.com
-        cidr-port-rel: [10.151.54.0/24:4000]
+        cidr-port-rel: [10.151.96.0/21:5000]
         environment:
             HTTP_PROXY: 'http://egress.ps7.internal:3128'
             HTTPS_PROXY: 'http://egress.ps7.internal:3128'
@@ -49,10 +49,10 @@ backends:
                 image: snapd-spread/ubuntu-24.04-64
             - ubuntu-24.04-64-uefi:
                 image: snapd-spread/ubuntu-24.04-64-uefi
-            - ubuntu-25.04-64:
-                image: snapd-spread/ubuntu-25.04-64
             - ubuntu-25.10-64:
                 image: snapd-spread/ubuntu-25.10-64
+            - ubuntu-26.04-64:
+                image: snapd-spread/ubuntu-26.04-64
 
             - arch-linux-64:
                 image: snapd-spread/arch-linux-64
@@ -64,18 +64,18 @@ backends:
                 storage: 50G
 
             - debian-12-64:
-                  image: snapd-spread/debian-12-64
-
-            - fedora-42-64:
-                  image: snapd-spread/fedora-42-64
-            - opensuse-15.6-64:
-                  image: snapd-spread/opensuse-15.6-64
-            - opensuse-tumbleweed-64:
-                  image: snapd-spread/opensuse-tumbleweed-64
-            - centos-9-64:
-                  image: snapd-spread/centos-9-64
+                image: snapd-spread/debian-12-64
             - debian-sid-64:
-                  image: snapd-spread/debian-sid-64
+                image: snapd-spread/debian-sid-64
+
+            - fedora-44-64:
+                image: snapd-spread/fedora-44-64
+            - opensuse-16.0-64:
+                image: snapd-spread/opensuse-16.0-64
+            - opensuse-tumbleweed-64:
+                image: snapd-spread/opensuse-tumbleweed-64
+            - centos-9-64:
+                image: snapd-spread/centos-9-64
 
 
     openstack-arm:
