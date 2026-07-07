@@ -789,6 +789,9 @@ func (p *openstackProvider) createMachine(ctx context.Context, system *System) (
 		"owner":  strings.ToLower(username()),
 		"reuse":  strconv.FormatBool(p.options.Reuse),
 	}
+	if p.project != nil && p.project.Name != "" {
+		tags["project"] = p.project.Name
+	}
 
 	// halt-timeout is added to the server to determine the time when it
 	// has to be garbage collected
