@@ -1390,6 +1390,30 @@ keys provider, currently just launchpad and github are supported. When a key is 
 the device, the ssh-rsa-key is used to connect to the target device and the ssh-key-pass can
 be used to read the key if the rsa key is encrypted.
 
+If the TestFlinger deployment requires API authentication, spread reads
+`TESTFLINGER_CLIENT_ID` and `TESTFLINGER_SECRET_KEY` once when the backend is
+initialized and sends them on every TestFlinger request. These values may be
+exported directly in the environment, or loaded through the backend `key`
+setting when it points to a dotenv-style file.
+
+_$PROJECT/spread.yaml_
+```
+backends:
+    testflinger:
+        key: '$(HOST: echo "$SPREAD_TESTFLINGER_ENV")'
+        systems:
+            - ubuntu-rpi3:
+                  queue: rpi3
+                  image: https://url/pi.img.xz
+                  username: user
+```
+
+Example dotenv file contents:
+```
+TESTFLINGER_CLIENT_ID=...
+TESTFLINGER_SECRET_KEY=...
+```
+
 Read this link to make your life easier:
     * [Testflinger documentation](https://testflinger.readthedocs.io)
 
