@@ -49,6 +49,11 @@ type TestFlingerProvider struct {
 	secretKey   string
 }
 
+type testFlingerTokenResponse struct {
+	AccessToken string `json:"access_token"`
+	TokenType   string `json:"token_type"`
+}
+
 type TestFlingerJob struct {
 	p *TestFlingerProvider
 	d TestFlingerJobData
@@ -538,14 +543,62 @@ func (p *TestFlingerProvider) checkAuth() error {
 	return p.authErr
 }
 
-// addTestFlingerAuth injects cached API credentials in outgoing requests.
-// When credentials are unset, no auth headers are added.
-func (p *TestFlingerProvider) addTestFlingerAuth(req *http.Request) {
+// addTestFlingerClientAuth injects the client credentials used to obtain an
+// access token from the oauth2 endpoint.
+func (p *TestFlingerProvider) addTestFlingerClientAuth(req *http.Request) {
 	if p.clientID == "" || p.secretKey == "" {
 		return
 	}
-	req.Header.Set("client_id", p.clientID)
-	req.Header.Set("secret_key", p.secretKey)
+	req.SetBasicAuth(p.clientID, p.secretKey)
+}
+
+func (p *TestFlingerProvider) addTestFlingerBearerAuth(req *http.Request, token string) {
+	if token == "" {
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+}
+
+func (p *TestFlingerProvider) getAccessToken() (string, error) {
+	if p.authErr != nil {
+		return "", p.authErr
+	}
+
+	tokenURL := getTestflingerUrl("/oauth2/token")
+	req, err := http.NewRequest("POST", tokenURL, bytes.NewBuffer(nil))
+	if err != nil {
+		return "", &FatalError{fmt.Errorf("cannot create TestFlinger token request: %v", err)}
+	}
+	req.Header.Set("Content-Type", "application/json")
+	p.addTestFlingerClientAuth(req)
+
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("cannot perform TestFlinger token request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	data, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("cannot read TestFlinger token response: %v", err)
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body := strings.TrimSpace(string(data))
+		if body == "" {
+			body = "<empty>"
+		}
+		return "", fmt.Errorf("TestFlinger token request failed (status %d): %s", resp.StatusCode, body)
+	}
+
+	var tokenResp testFlingerTokenResponse
+	if err := json.Unmarshal(data, &tokenResp); err != nil {
+		return "", fmt.Errorf("cannot decode TestFlinger token response: %v", err)
+	}
+	if tokenResp.AccessToken == "" {
+		return "", fmt.Errorf("TestFlinger token response did not include access_token")
+	}
+	return tokenResp.AccessToken, nil
 }
 
 func (p *TestFlingerProvider) do(method, subpath string, params interface{}, result interface{}) error {
@@ -564,6 +617,10 @@ func (p *TestFlingerProvider) do(method, subpath string, params interface{}, res
 	}
 
 	url := getTestflingerUrl(subpath)
+	token, err := p.getAccessToken()
+	if err != nil {
+		return err
+	}
 
 	// Repeat on 500s. Note that Google's 500s may come in late, as a marshaled error
 	// under a different code. See the INTERNAL handling at the end below.
@@ -576,7 +633,7 @@ func (p *TestFlingerProvider) do(method, subpath string, params interface{}, res
 			return &FatalError{fmt.Errorf("cannot create HTTP request: %v", err)}
 		}
 		req.Header.Set("Content-Type", "application/json")
-		p.addTestFlingerAuth(req)
+		p.addTestFlingerBearerAuth(req, token)
 		resp, err = p.client.Do(req)
 		if err == nil && 500 <= resp.StatusCode && resp.StatusCode < 600 {
 			time.Sleep(time.Duration(delays[i]) * 250 * time.Millisecond)
@@ -644,6 +701,10 @@ func (p *TestFlingerProvider) dop(method, subpath string, params interface{}) (s
 	}
 
 	url := getTestflingerUrl(subpath)
+	token, err := p.getAccessToken()
+	if err != nil {
+		return "", err
+	}
 
 	// Repeat on 500s. Note that Google's 500s may come in late, as a marshaled error
 	// under a different code. See the INTERNAL handling at the end below.
@@ -656,7 +717,7 @@ func (p *TestFlingerProvider) dop(method, subpath string, params interface{}) (s
 			return "", &FatalError{fmt.Errorf("cannot create HTTP request: %v", err)}
 		}
 		req.Header.Set("Content-Type", "application/json")
-		p.addTestFlingerAuth(req)
+		p.addTestFlingerBearerAuth(req, token)
 		resp, err = p.client.Do(req)
 		if err == nil && 500 <= resp.StatusCode && resp.StatusCode < 600 {
 			time.Sleep(time.Duration(delays[i]) * 250 * time.Millisecond)
