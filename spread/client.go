@@ -360,13 +360,47 @@ func (c *Client) run(script string, dir string, env *Environment, mode outputMod
 		if err != nil {
 			return nil, err
 		}
-		c.Run("reboot", "", nil)
+		if err := c.requestReboot(); err != nil {
+			return nil, err
+		}
 
 		if err := c.dialOnReboot(bootID); err != nil {
 			return nil, err
 		}
 	}
 	panic("unreachable")
+}
+
+// requestReboot asks the remote system to reboot without waiting for command
+// completion, then closes the current SSH client so reconnect can start
+// immediately. Waiting here is unsafe because reboot often drops sshd
+// uncleanly and may block for minutes.
+func (c *Client) requestReboot() error {
+	session, err := c.sshc.NewSession()
+	if err != nil {
+		return fmt.Errorf("cannot open reboot session on %s: %v", c.job, err)
+	}
+
+	const rebootRequestTimeout = 20 * time.Second
+	startDone := make(chan error, 1)
+	go func() {
+		startDone <- session.Start(c.sudo() + "reboot")
+	}()
+
+	select {
+	case err := <-startDone:
+		if err != nil {
+			session.Close()
+			return fmt.Errorf("cannot start reboot on %s: %v", c.job, err)
+		}
+	case <-time.After(rebootRequestTimeout):
+	}
+
+	// Do not wait for the reboot command completion. During reboot, remote sshd
+	// often drops the transport uncleanly and waiting can block for minutes.
+	session.Close()
+	c.sshc.Close()
+	return nil
 }
 
 func (c *Client) getBootID() (string, error) {
