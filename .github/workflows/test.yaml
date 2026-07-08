@@ -239,6 +239,8 @@ jobs:
     - name: Smoke tests with testflinger backend
       env: 
           SPREAD_PARAMS: ${{ vars.SPREAD_PARAMS }}
+          TESTFLINGER_CLIENT_ID: ${{ secrets.TESTFLINGER_CLIENT_ID }}
+          TESTFLINGER_SECRET_KEY: ${{ secrets.TESTFLINGER_SECRET_KEY }}
       run: |
           cd "${{ github.workspace }}"/smoke
           chmod +x "${{ github.workspace }}"/bin/spread-plus
