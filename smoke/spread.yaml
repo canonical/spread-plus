@@ -92,8 +92,6 @@ backends:
             no_proxy: '127.0.0.1,localhost'
             NO_PROXY: '127.0.0.1,localhost'
         systems:
-            - ubuntu-20.04-arm-64:
-                image: snapd-spread/ubuntu-20.04-arm-64
             - ubuntu-22.04-arm-64:
                 image: snapd-spread/ubuntu-22.04-arm-64
             - ubuntu-24.04-arm-64:
