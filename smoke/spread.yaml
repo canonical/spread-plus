@@ -49,16 +49,13 @@ backends:
                 image: snapd-spread/ubuntu-24.04-64
             - ubuntu-24.04-64-uefi:
                 image: snapd-spread/ubuntu-24.04-64-uefi
-            - ubuntu-25.10-64:
-                image: snapd-spread/ubuntu-25.10-64
             - ubuntu-26.04-64:
                 image: snapd-spread/ubuntu-26.04-64
+            - ubuntu-26.10-64:
+                image: snapd-spread/ubuntu-26.10-64
 
             - arch-linux-64:
                 image: snapd-spread/arch-linux-64
-            - amazon-linux-2-64:
-                image: snapd-spread/amazon-linux-2-64
-                storage: 50G
             - amazon-linux-2023-64:
                 image: snapd-spread/amazon-linux-2023-64
                 storage: 50G

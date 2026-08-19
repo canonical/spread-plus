@@ -158,9 +158,8 @@ backends:
                   groups:
                       - group_external
 
-                  # Root volume size in bytes (e.g. 20GB = 20*1024*1024*1024).
                   # Defaults to the image's minimum disk size, or 20 GB.
-                  storage: 21474836480
+                  storage: 20G
 
                   # How long to wait for the instance to reach ACTIVE.
                   # Defaults to 3 minutes.
@@ -241,5 +240,5 @@ backends:
             - ubuntu-internal:
                   image: ubuntu-noble-daily-amd64
                   plan: m1.large
-                  storage: 42949672960
+                  storage: 20G
 ```
