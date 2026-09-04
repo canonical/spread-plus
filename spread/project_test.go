@@ -93,6 +93,33 @@ suites:
 	c.Check(backend.Systems["system-3"].Plan, Equals, "global-plan")
 }
 
+func (s *projectSuite) TestUndefinedSuiteBackendFromYaml(c *C) {
+	spreadYaml := []byte(`project: mock-prj
+path: /remote/path
+backends:
+ lxd:
+  systems:
+   - ubuntu-22.04:
+suites:
+ tests/:
+  summary: mock tests
+  backends: [qemu]
+`)
+	tmpdir := c.MkDir()
+	err := ioutil.WriteFile(filepath.Join(tmpdir, "spread.yaml"), spreadYaml, 0644)
+	c.Assert(err, IsNil)
+	err = os.MkdirAll(filepath.Join(tmpdir, "tests", "task"), 0755)
+	c.Assert(err, IsNil)
+	err = ioutil.WriteFile(filepath.Join(tmpdir, "tests", "task", "task.yaml"), []byte("summary: mock task\n"), 0644)
+	c.Assert(err, IsNil)
+
+	project, err := spread.Load(tmpdir)
+	c.Assert(err, IsNil)
+	jobs, err := project.Jobs(&spread.Options{})
+	c.Check(jobs, IsNil)
+	c.Check(err, ErrorMatches, `suite tests/ refers to undefined backend "qemu"`)
+}
+
 func (s *projectSuite) TestOptionalInt(c *C) {
 	optInts := struct {
 		Priority spread.OptionalInt `yaml:"priority"`
@@ -113,6 +140,7 @@ func (s *projectSuite) TestOptionalInt(c *C) {
 
 func createSuiteWithSystems(project *spread.Project, suiteSys []string, taskSys []string) {
 	project.Suites = map[string]*spread.Suite{"suite/": {
+		Name:    "suite/",
 		Systems: suiteSys,
 		Tasks:   map[string]*spread.Task{"task": {Systems: taskSys, Samples: 1, Suite: "suite/", Name: "suite/task"}}},
 	}
@@ -226,8 +254,56 @@ func (s *projectSuite) TestSupportedSystemsSuiteLessRestrictiveThanTask(c *C) {
 
 func createSuiteWithBackends(project *spread.Project, suiteBkends []string, taskBkends []string) {
 	project.Suites = map[string]*spread.Suite{"suite/": {
+		Name:     "suite/",
 		Backends: suiteBkends,
 		Tasks:    map[string]*spread.Task{"task": {Backends: taskBkends, Samples: 1, Suite: "suite/", Name: "suite/task"}}},
+	}
+}
+
+func (s *projectSuite) TestUndefinedReferences(c *C) {
+	newProject := func() *spread.Project {
+		project := &spread.Project{
+			RemotePath: "/remote/path",
+			Backends: map[string]*spread.Backend{
+				"lxd": {
+					Name: "lxd",
+					Systems: spread.SystemsMap{
+						"ubuntu-22.04": &spread.System{Name: "ubuntu-22.04"},
+					},
+				},
+			},
+		}
+		createSuiteWithBackends(project, nil, nil)
+		return project
+	}
+
+	tests := []struct {
+		setup func(*spread.Project)
+		err   string
+	}{
+		{
+			setup: func(project *spread.Project) { project.Suites["suite/"].Backends = []string{"qemu"} },
+			err:   `suite suite/ refers to undefined backend "qemu"`,
+		},
+		{
+			setup: func(project *spread.Project) { project.Suites["suite/"].Tasks["task"].Backends = []string{"qemu"} },
+			err:   `suite/task refers to undefined backend "qemu"`,
+		},
+		{
+			setup: func(project *spread.Project) {
+				project.Backends = nil
+				project.Suites["suite/"].Backends = []string{"qemu"}
+			},
+			err: `suite suite/ refers to undefined backend "qemu"`,
+		},
+	}
+
+	for _, test := range tests {
+		project := newProject()
+		test.setup(project)
+		jobs, err := project.Jobs(&spread.Options{})
+		c.Check(jobs, IsNil)
+		c.Check(err, ErrorMatches, test.err)
 	}
 }
 
@@ -246,7 +322,7 @@ func (s *projectSuite) TestSupportedBackendsSuitesMoreRestrictiveThanTask(c *C) 
 		}}
 
 	// If a suite explicitly lists supported backends, only those systems are in the job list
-	createSuiteWithBackends(&project, []string{"lx*"}, []string{"lxd", "qemu", "openstack"})
+	createSuiteWithBackends(&project, []string{"lx*"}, []string{"lxd", "qemu"})
 	jobs, err := project.Jobs(&spread.Options{})
 	c.Assert(err, IsNil)
 	c.Assert(len(jobs), Equals, 1)
@@ -299,7 +375,7 @@ func (s *projectSuite) TestSupportedBackendsSuitesLessRestrictiveThanTask(c *C) 
 	c.Assert(err, ErrorMatches, `cannot find any tasks`)
 
 	// if a suite adds a backend yet a task excludes it, it doesn't appear on the list
-	createSuiteWithBackends(&project, []string{"+qe*"}, []string{"-qe*", "-openstack"})
+	createSuiteWithBackends(&project, []string{"+qe*"}, []string{"-qe*"})
 	jobs, err = project.Jobs(&spread.Options{})
 	c.Assert(err, IsNil)
 	c.Assert(len(jobs), Equals, 1)
