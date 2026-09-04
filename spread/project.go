@@ -955,8 +955,51 @@ func (p *Project) backendNames() []string {
 	return bnames
 }
 
+func checkBackendReferences(context fmt.Stringer, references, defined []string) error {
+	for _, reference := range references {
+		name := strings.TrimPrefix(strings.TrimPrefix(reference, "+"), "-")
+		matches := false
+		for _, candidate := range defined {
+			matched, err := filepath.Match(name, candidate)
+			if err != nil {
+				return err
+			}
+			matches = matches || matched
+		}
+		if !matches {
+			return fmt.Errorf("%s refers to undefined backend %q", context, name)
+		}
+	}
+	return nil
+}
+
+func (p *Project) checkBackendReferences() error {
+	backends := p.backendNames()
+
+	for _, suite := range p.Suites {
+		if suite == nil {
+			return fmt.Errorf("project contains an undefined suite")
+		}
+		if err := checkBackendReferences(suite, suite.Backends, backends); err != nil {
+			return err
+		}
+		for _, task := range suite.Tasks {
+			if task == nil {
+				return fmt.Errorf("%s contains an undefined task", suite)
+			}
+			if err := checkBackendReferences(task, task.Backends, backends); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func (p *Project) Jobs(options *Options) ([]*Job, error) {
 	var jobs []*Job
+	if err := p.checkBackendReferences(); err != nil {
+		return nil, err
+	}
 
 	hasFilter := options.Filter != nil
 	manualBackends := hasFilter
