@@ -964,7 +964,10 @@ func checkBackendReferences(context fmt.Stringer, references, defined []string) 
 			if err != nil {
 				return err
 			}
-			matches = matches || matched
+			if matched {
+				matches = true
+				break
+			}
 		}
 		if !matches {
 			return fmt.Errorf("%s refers to undefined backend %q", context, name)
