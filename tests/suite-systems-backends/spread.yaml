@@ -7,6 +7,9 @@ backends:
     openstack:
         systems:
             - ubuntu-24.04
+    qemu:
+        systems:
+            - ubuntu-24.04
 
 path: /home/test
 
