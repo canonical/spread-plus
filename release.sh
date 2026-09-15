@@ -67,12 +67,14 @@ prepare() {
 	local branch="release-${version}"
 	local binary
 
+	# Fail before changing branches if the local or remote release state is unsafe.
 	require_command gh
 	require_command go
 	require_clean_tree
 	gh auth status >/dev/null
 	require_unreleased "${version}"
 
+	# Prepare the release from the latest main branch.
 	git switch main
 	git pull --ff-only "${remote}" main
 	git show-ref --verify --quiet "refs/heads/${branch}" &&
@@ -82,6 +84,7 @@ prepare() {
 	sed -i -E "0,/^version: .*/s//version: ${version}/" snapcraft.yaml
 	[[ "$(snapcraft_version)" == "${version}" ]] || die "failed to update snapcraft.yaml"
 
+	# Validate the source and embedded version before publishing the branch.
 	go test ./...
 	binary=$(mktemp "${TMPDIR:-/tmp}/spread-plus.XXXXXX")
 	trap 'rm -f "${binary}"' RETURN
@@ -90,6 +93,7 @@ prepare() {
 	rm -f "${binary}"
 	trap - RETURN
 
+	# Hand the prepared change off for CI and human review.
 	git add snapcraft.yaml
 	git commit -m "Prepare ${version} release"
 	git push -u "${remote}" "${branch}"
@@ -99,6 +103,7 @@ prepare() {
 publish() {
 	local version="$1"
 
+	# Publish only a clean, merged release version from the latest main branch.
 	require_command gh
 	require_clean_tree
 	gh auth status >/dev/null
@@ -109,6 +114,7 @@ publish() {
 		die "snapcraft.yaml version is $(snapcraft_version), expected ${version}"
 	require_unreleased "${version}"
 
+	# Publishing the release triggers the workflow that builds all release assets.
 	gh release create "${version}" \
 		--repo "${repo}" \
 		--target main \
@@ -122,12 +128,14 @@ verify() {
 	local output_dir="spread-plus-${version}"
 	local assets
 
+	# Refuse to overwrite an earlier verification download.
 	require_command gh
 	require_command sha256sum
 	require_command tar
 	gh auth status >/dev/null
 	[[ ! -e "${output_dir}" ]] || die "verification directory already exists: ${output_dir}"
 
+	# Check the complete asset set before downloading anything.
 	assets=$(gh release view "${version}" --repo "${repo}" --json assets --jq '.assets[].name')
 	for asset in \
 		spread-plus-amd64.tar.gz \
@@ -142,6 +150,7 @@ verify() {
 	gh release download "${version}" --repo "${repo}" --dir "${output_dir}"
 	(
 		cd "${output_dir}"
+		# Verify every downloaded archive and snap against the published checksums.
 		sha256sum --check SHA256SUMS
 
 		case "$(uname -m)" in
@@ -150,6 +159,7 @@ verify() {
 			*) die "unsupported local architecture: $(uname -m)" ;;
 		esac
 
+		# Confirm the native release binary reports the exact release tag.
 		tar -xzf "spread-plus-${architecture}.tar.gz"
 		[[ "$(./spread-plus --version)" == "${version}" ]] ||
 			die "released binary reported the wrong version"
