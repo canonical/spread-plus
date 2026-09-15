@@ -26,6 +26,13 @@ apps:
         command: bin/spread
         plugs: [home, network, network-bind]
 
+slots:
+    spread-bin:
+        interface: content
+        content: spread-bin
+        read:
+          - $SNAP/bin
+
 parts:
     spread-plus:
         plugin: go
