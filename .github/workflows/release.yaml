@@ -1,0 +1,81 @@
+name: Release spread-plus
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.arch }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            goarch: amd64
+          - arch: arm64
+            goarch: arm64
+
+    steps:
+      - name: Checkout release
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Install Go
+        run: |
+          sudo snap install go --classic
+
+      - name: Build spread-plus
+        env:
+          GOARCH: ${{ matrix.goarch }}
+          GOOS: linux
+        run: |
+          VERSION="${{ github.event.release.tag_name }}"
+
+          go build \
+            -ldflags "-X main.version=${VERSION}" \
+            -o spread-plus \
+            ./cmd/spread
+
+      - name: Package
+        run: |
+          tar -czf "spread-plus-${{ matrix.arch }}.tar.gz" spread-plus
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: spread-plus-${{ matrix.arch }}
+          path: spread-plus-${{ matrix.arch }}.tar.gz
+
+  release:
+    name: Publish release assets
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Generate checksums
+        working-directory: dist
+        run: |
+          sha256sum \
+            spread-plus-amd64.tar.gz \
+            spread-plus-arm64.tar.gz \
+            > SHA256SUMS
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/spread-plus-amd64.tar.gz
+            dist/spread-plus-arm64.tar.gz
+            dist/SHA256SUMS
