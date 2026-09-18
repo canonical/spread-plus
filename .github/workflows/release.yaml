@@ -47,7 +47,7 @@ jobs:
           tar -czf "spread-plus-${{ matrix.arch }}.tar.gz" spread-plus
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: spread-plus-${{ matrix.arch }}
           path: spread-plus-${{ matrix.arch }}.tar.gz
@@ -80,7 +80,7 @@ jobs:
         run: mv "${BUILT_SNAP}" "spread-plus-${{ matrix.arch }}.snap"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: spread-plus-snap-${{ matrix.arch }}
           path: spread-plus-${{ matrix.arch }}.snap
@@ -92,7 +92,7 @@ jobs:
 
     steps:
       - name: Download artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
