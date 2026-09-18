@@ -52,9 +52,42 @@ jobs:
           name: spread-plus-${{ matrix.arch }}
           path: spread-plus-${{ matrix.arch }}.tar.gz
 
+  build-snap:
+    name: Build snap ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+
+    steps:
+      - name: Checkout release
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Build snap
+        id: snapcraft
+        uses: snapcore/action-build@v1
+
+      - name: Rename snap
+        env:
+          BUILT_SNAP: ${{ steps.snapcraft.outputs.snap }}
+        run: mv "${BUILT_SNAP}" "spread-plus-${{ matrix.arch }}.snap"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: spread-plus-snap-${{ matrix.arch }}
+          path: spread-plus-${{ matrix.arch }}.snap
+
   release:
     name: Publish release assets
-    needs: build
+    needs: [build, build-snap]
     runs-on: ubuntu-latest
 
     steps:
@@ -70,6 +103,8 @@ jobs:
           sha256sum \
             spread-plus-amd64.tar.gz \
             spread-plus-arm64.tar.gz \
+            spread-plus-amd64.snap \
+            spread-plus-arm64.snap \
             > SHA256SUMS
 
       - name: Upload release assets
@@ -78,4 +113,6 @@ jobs:
           files: |
             dist/spread-plus-amd64.tar.gz
             dist/spread-plus-arm64.tar.gz
+            dist/spread-plus-amd64.snap
+            dist/spread-plus-arm64.snap
             dist/SHA256SUMS
