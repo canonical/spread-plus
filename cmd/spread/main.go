@@ -147,7 +147,11 @@ func run() error {
 	signal.Notify(sigch, os.Interrupt)
 	go func() {
 		<-sigch
-		runner.Stop()
+		printf("Interrupted, cleaning up (press Ctrl+C again to exit immediately)...")
+		go runner.Stop()
+		<-sigch
+		printf("Interrupted again, exiting immediately.")
+		os.Exit(130)
 	}()
 
 	return runner.Wait()
