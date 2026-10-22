@@ -3,6 +3,7 @@ package spread
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -152,6 +153,15 @@ type projectContent struct {
 
 func (r *Runner) Wait() error {
 	return r.tomb.Wait()
+}
+
+// closeOnStop closes the client's connection once the runner is stopped,
+// which aborts any remote command or transfer still in flight.
+func (r *Runner) closeOnStop(client *Client) {
+	go func() {
+		<-r.tomb.Dying()
+		client.Close()
+	}()
 }
 
 func (r *Runner) Stop() error {
@@ -1004,7 +1014,7 @@ func (r *Runner) fetchJobArtifacts(client *Client, job *Job) error {
 }
 
 func (r *Runner) discardServer(server Server) {
-	if err := server.Discard(r.tomb.Context(nil)); err != nil {
+	if err := server.Discard(context.Background()); err != nil {
 		printf("Error discarding %s: %v", server, err)
 	}
 	if err := r.reuse.Remove(server); err != nil {
@@ -1117,6 +1127,7 @@ Dial:
 		return nil
 	}
 
+	r.closeOnStop(client)
 	printf("Connected to %s at %s.", server, server.Address())
 	r.servers = append(r.servers, server)
 	return client
@@ -1180,6 +1191,7 @@ func (r *Runner) reuseServer(backend *Backend, system *System) *Client {
 			continue
 		}
 
+		r.closeOnStop(client)
 		return client
 	}
 	return nil
