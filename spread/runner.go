@@ -29,6 +29,7 @@ type Options struct {
 	Reuse          bool
 	ReusePid       int
 	Debug          bool
+	Attach         bool
 	NoDebug        bool
 	Shell          bool
 	ShellBefore    bool
@@ -77,6 +78,10 @@ type Runner struct {
 }
 
 func Start(project *Project, options *Options) (*Runner, error) {
+	if options.Attach && !options.Debug && !options.Shell {
+		return nil, fmt.Errorf("an attach socket requires -debug or -shell")
+	}
+
 	r := &Runner{
 		project:   project,
 		options:   options,
@@ -143,6 +148,34 @@ func (r *Runner) reusePath() string {
 		return filepath.Join(r.project.Path, ".spread-reuse.yaml")
 	}
 	return filepath.Join(r.project.Path, fmt.Sprintf(".spread-reuse.%d.yaml", os.Getpid()))
+}
+
+// attachPath combines the reuse-file ID with a sanitized machine label.
+func (r *Runner) attachPath(machineName string) string {
+	var safeName strings.Builder
+	for _, char := range machineName {
+		switch {
+		case char >= 'a' && char <= 'z',
+			char >= 'A' && char <= 'Z',
+			char >= '0' && char <= '9',
+			char == '-', char == '_', char == '.':
+			safeName.WriteRune(char)
+		default:
+			safeName.WriteByte('_')
+		}
+	}
+	name := strings.Trim(safeName.String(), ".")
+	if name == "" {
+		name = "machine"
+	}
+	filename := strings.TrimSuffix(filepath.Base(r.reusePath()), ".yaml") + "." + name + ".socket"
+	path := filepath.Join(r.project.Path, filename)
+	if workingDir, err := os.Getwd(); err == nil {
+		if relativePath, err := filepath.Rel(workingDir, path); err == nil {
+			return relativePath
+		}
+	}
+	return path
 }
 
 type projectContent struct {
@@ -516,10 +549,7 @@ func (r *Runner) run(client *Client, job *Job, verb string, context interface{},
 	}
 	if (r.options.Shell || r.options.ShellBefore) && verb == executing {
 		printf("Starting shell instead of %s %s...", verb, job)
-		err := client.Shell("", dir, r.shellEnv(job, job.Environment))
-		if err != nil {
-			printf("Error running debug shell: %v", err)
-		}
+		r.runInteractiveShell(client, dir, r.shellEnv(job, job.Environment))
 		printf("Continuing...")
 		if r.options.Shell {
 			return true
@@ -575,10 +605,7 @@ func (r *Runner) run(client *Client, job *Job, verb string, context interface{},
 		}
 		if r.options.Debug || r.options.ShellAfter {
 			printf("Starting shell to debug...")
-			err = client.Shell("", dir, r.shellEnv(job, job.Environment))
-			if err != nil {
-				printf("Error running debug shell: %v", err)
-			}
+			r.runInteractiveShell(client, dir, r.shellEnv(job, job.Environment))
 			printf("Continuing...")
 		}
 		*abend = r.options.Abend
@@ -586,10 +613,7 @@ func (r *Runner) run(client *Client, job *Job, verb string, context interface{},
 	}
 	if r.options.ShellAfter && verb == executing {
 		printf("Starting shell after %s %s...", verb, job)
-		err := client.Shell("", dir, r.shellEnv(job, job.Environment))
-		if err != nil {
-			printf("Error running debug shell: %v", err)
-		}
+		r.runInteractiveShell(client, dir, r.shellEnv(job, job.Environment))
 		printf("Continuing...")
 	}
 	// Print or save performance output
@@ -604,6 +628,29 @@ func (r *Runner) run(client *Client, job *Job, verb string, context interface{},
 	}
 
 	return true
+}
+
+// runInteractiveShell keeps the attach broker alive for the shell's lifetime.
+func (r *Runner) runInteractiveShell(client *Client, dir string, env *Environment) {
+	var attachBroker *AttachBroker
+	if r.options.Attach {
+		broker, err := StartAttachBroker(r.attachPath(client.Server().Label()), client, dir, env)
+		if err != nil {
+			printf("Cannot enable agent SSH attach: %v", err)
+		} else {
+			attachBroker = broker
+			printf("Agent commands can use a separate SSH connection with: spread attach %s -- <command>", broker.Path())
+		}
+	}
+
+	if err := client.Shell("", dir, env); err != nil {
+		printf("Error running debug shell: %v", err)
+	}
+	if attachBroker != nil {
+		if err := attachBroker.Close(); err != nil {
+			printf("Error closing agent SSH attach: %v", err)
+		}
+	}
 }
 
 func (r *Runner) shellEnv(job *Job, env *Environment) *Environment {

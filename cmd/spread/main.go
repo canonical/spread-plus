@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/rand"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -26,6 +27,7 @@ var (
 	reusePid       = flag.Int("reuse-pid", 0, "Reuse servers from crashed process")
 	resend         = flag.Bool("resend", false, "Resend project content to reused servers")
 	debug          = flag.Bool("debug", false, "Run shell after script errors")
+	attach         = flag.Bool("attach", false, "Create an agent attach socket (requires -debug or -shell)")
 	noDebug        = flag.Bool("no-debug-output", false, "Debug output is saved to file")
 	shell          = flag.Bool("shell", false, "Run shell instead of task scripts")
 	shellBefore    = flag.Bool("shell-before", false, "Run shell before task scripts")
@@ -48,11 +50,29 @@ var (
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		var attachErr *attachExitError
+		if errors.As(err, &attachErr) {
+			os.Exit(attachErr.status)
+		}
 		os.Exit(1)
 	}
 }
 
+// attachExitError preserves the exit status returned by an attached command.
+type attachExitError struct {
+	status int
+}
+
+// Error describes a nonzero exit status from the remote command.
+func (e *attachExitError) Error() string {
+	return fmt.Sprintf("remote command exited with status %d", e.status)
+}
+
 func run() error {
+	if len(os.Args) > 1 && os.Args[1] == "attach" {
+		return runAttach(os.Args[2:])
+	}
+
 	mrand.Seed(time.Now().UnixNano())
 	flag.Parse()
 	if *showVersion {
@@ -71,6 +91,9 @@ func run() error {
 
 		}
 		other = other || b
+	}
+	if *attach && !*debug && !*shell {
+		return fmt.Errorf("-attach requires -debug or -shell")
 	}
 
 	password := *pass
@@ -99,6 +122,7 @@ func run() error {
 		ReusePid:       *reusePid,
 		Resend:         *resend,
 		Debug:          *debug,
+		Attach:         *attach,
 		NoDebug:        *noDebug,
 		Shell:          *shell,
 		ShellBefore:    *shellBefore,
@@ -151,6 +175,24 @@ func run() error {
 	}()
 
 	return runner.Wait()
+}
+
+// runAttach sends a command to the socket created by a paused Spread shell.
+func runAttach(args []string) error {
+	if len(args) < 3 || args[1] != "--" {
+		return fmt.Errorf("usage: spread attach SOCKET -- COMMAND")
+	}
+	output, exitCode, err := spread.AttachCommand(args[0], strings.Join(args[2:], " "))
+	if _, writeErr := os.Stdout.Write(output); writeErr != nil {
+		return fmt.Errorf("cannot write remote command output: %v", writeErr)
+	}
+	if err != nil {
+		return err
+	}
+	if exitCode != 0 {
+		return &attachExitError{status: exitCode}
+	}
+	return nil
 }
 
 func printf(format string, v ...interface{}) {
