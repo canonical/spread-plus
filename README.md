@@ -31,7 +31,6 @@ The primary goal of Spread Plus is to make the testing and validation workflow m
 [Timeouts](#timeouts)  
 [Fast iterations with reuse](#reuse)  
 [Debugging](#debugging)  
-[Smoke test workflow](#smoke-test-workflow)
 [Repeating tasks](#repeating)  
 [Define number of Workers](#workers)  
 [Passwords and usernames](#passwords)  
@@ -609,17 +608,6 @@ debug: |
 In a similar way to prepare and restore scripts, these can also be defined
 as a `debug-each` script at the project, backend, and suite levels, so they
 are aggregated and repeated for every task under them.
-
-<a name="smoke-test-workflow"/>
-
-## Smoke test workflow
-
-The OpenStack amd64 smoke job runs the reboot and attach checks on Ubuntu 22.04.
-The helper in `smoke/lib/run-smoke.sh` starts the attach check with
-`-shell -attach`, waits for `.spread.socket`, verifies that `spread exec -- pwd`
-returns the task directory, and runs `cat /etc/os-release` through
-`spread exec`. It checks the OS and verifies that the socket is removed when
-the shell closes.
 
 <a name="ordering">
 
