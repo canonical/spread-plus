@@ -27,7 +27,7 @@ var (
 	reusePid       = flag.Int("reuse-pid", 0, "Reuse servers from crashed process")
 	resend         = flag.Bool("resend", false, "Resend project content to reused servers")
 	debug          = flag.Bool("debug", false, "Run shell after script errors")
-	attach         = flag.Bool("attach", false, "Create an exec socket (requires -debug or -shell)")
+	debugSocket    = flag.Bool("debug-socket", false, "Pause after task errors for socket-based debugging")
 	noDebug        = flag.Bool("no-debug-output", false, "Debug output is saved to file")
 	shell          = flag.Bool("shell", false, "Run shell instead of task scripts")
 	shellBefore    = flag.Bool("shell-before", false, "Run shell before task scripts")
@@ -72,6 +72,9 @@ func run() error {
 	if len(os.Args) > 1 && os.Args[1] == "exec" {
 		return runExec(os.Args[2:])
 	}
+	if len(os.Args) > 1 && os.Args[1] == "stop" {
+		return runStop(os.Args[2:])
+	}
 
 	mrand.Seed(time.Now().UnixNano())
 	flag.Parse()
@@ -85,17 +88,13 @@ func run() error {
 	spread.Debug = *vverbose
 
 	var other bool
-	for _, b := range []bool{*debug, *shell, *shellBefore || *shellAfter, *abend, *restore} {
+	for _, b := range []bool{*debug, *debugSocket, *shell, *shellBefore || *shellAfter, *abend, *restore} {
 		if b && other {
-			return fmt.Errorf("cannot have more than one of -debug, -shell, -shell-before/after, -abend, and -restore")
+			return fmt.Errorf("cannot have more than one of -debug, -debug-socket, -shell, -shell-before/after, -abend, and -restore")
 
 		}
 		other = other || b
 	}
-	if *attach && !*debug && !*shell {
-		return fmt.Errorf("-attach requires -debug or -shell")
-	}
-
 	password := *pass
 	if password == "" {
 		buf := make([]byte, 8)
@@ -122,7 +121,7 @@ func run() error {
 		ReusePid:       *reusePid,
 		Resend:         *resend,
 		Debug:          *debug,
-		Attach:         *attach,
+		DebugSocket:    *debugSocket,
 		NoDebug:        *noDebug,
 		Shell:          *shell,
 		ShellBefore:    *shellBefore,
@@ -193,6 +192,13 @@ func runExec(args []string) error {
 		return &attachExitError{status: exitCode}
 	}
 	return nil
+}
+
+func runStop(args []string) error {
+	if len(args) != 0 {
+		return fmt.Errorf("usage: spread stop")
+	}
+	return spread.StopDebugSocket(spread.AttachSocketName)
 }
 
 func printf(format string, v ...interface{}) {

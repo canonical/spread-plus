@@ -1,6 +1,6 @@
-summary: Verify an attached command runs in the task directory.
+summary: Verify debug-socket commands run after a task failure.
 
 systems: [ubuntu-22.04-64]
 
 execute: |
-    test "$(pwd)" = "$SPREAD_PATH/tests/attach"
+    false

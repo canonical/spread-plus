@@ -48,7 +48,7 @@ func TestAttachCommand(t *testing.T) {
 
 func TestAttachBrokerSocketPermissions(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "attach.sock")
-	broker, err := StartAttachBroker(path, nil, "", NewEnvironment())
+	broker, err := StartDebugSocketBroker(path, nil, "", NewEnvironment())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,6 +65,47 @@ func TestAttachBrokerSocketPermissions(t *testing.T) {
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("expected attach socket to be removed, got %v", err)
+	}
+}
+
+func TestStopDebugSocket(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "debug.sock")
+	broker, err := StartDebugSocketBroker(path, nil, "", NewEnvironment())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := StopDebugSocket(path); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-broker.StopRequested():
+	default:
+		t.Fatal("expected debug socket stop request")
+	}
+
+	if err := broker.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("expected debug socket to be removed, got %v", err)
+	}
+}
+
+func TestStartRejectsDebugSocketWithInteractiveModes(t *testing.T) {
+	tests := []struct {
+		name    string
+		options *Options
+	}{
+		{name: "debug", options: &Options{DebugSocket: true, Debug: true}},
+		{name: "shell", options: &Options{DebugSocket: true, Shell: true}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := Start(nil, test.options); err == nil {
+				t.Fatal("expected incompatible debug-socket mode error")
+			}
+		})
 	}
 }
 

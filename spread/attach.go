@@ -19,6 +19,7 @@ const AttachSocketName = ".spread.socket"
 
 type attachRequest struct {
 	Command string
+	Stop    bool
 }
 
 type attachResponse struct {
@@ -35,6 +36,8 @@ type AttachBroker struct {
 	path      string
 	listener  *net.UnixListener
 	done      chan struct{}
+	stop      chan struct{}
+	stopOnce  sync.Once
 	mu        sync.Mutex
 	conns     map[net.Conn]struct{}
 	handlers  sync.WaitGroup
@@ -42,8 +45,8 @@ type AttachBroker struct {
 	closeErr  error
 }
 
-// StartAttachBroker opens a permission-restricted socket for the duration of a shell.
-func StartAttachBroker(path string, client *Client, dir string, env *Environment) (*AttachBroker, error) {
+// StartDebugSocketBroker opens a permission-restricted socket that can resume a paused run.
+func StartDebugSocketBroker(path string, client *Client, dir string, env *Environment) (*AttachBroker, error) {
 	if path == "" {
 		return nil, fmt.Errorf("attach socket path cannot be empty")
 	}
@@ -77,6 +80,7 @@ func StartAttachBroker(path string, client *Client, dir string, env *Environment
 		path:     path,
 		listener: listener,
 		done:     make(chan struct{}),
+		stop:     make(chan struct{}),
 		conns:    make(map[net.Conn]struct{}),
 	}
 	go broker.serve()
@@ -86,6 +90,11 @@ func StartAttachBroker(path string, client *Client, dir string, env *Environment
 // Path returns the local socket path used by attach clients.
 func (b *AttachBroker) Path() string {
 	return b.path
+}
+
+// StopRequested is closed when a client asks to resume the paused debug run.
+func (b *AttachBroker) StopRequested() <-chan struct{} {
+	return b.stop
 }
 
 // Close stops accepting commands, waits for active handlers, and removes the socket.
@@ -145,12 +154,17 @@ func (b *AttachBroker) handle(conn net.Conn) {
 		writeAttachResponse(conn, attachResponse{Error: fmt.Sprintf("invalid attach request: %v", err)})
 		return
 	}
-	if request.Command == "" {
-		writeAttachResponse(conn, attachResponse{Error: "attach command cannot be empty"})
-		return
-	}
 	if err := conn.SetReadDeadline(time.Time{}); err != nil {
 		printf("Error clearing agent attach request deadline: %v", err)
+		return
+	}
+	if request.Stop {
+		writeAttachResponse(conn, attachResponse{})
+		b.stopOnce.Do(func() { close(b.stop) })
+		return
+	}
+	if request.Command == "" {
+		writeAttachResponse(conn, attachResponse{Error: "debug socket command cannot be empty"})
 		return
 	}
 
@@ -171,21 +185,32 @@ func writeAttachResponse(conn net.Conn, response attachResponse) {
 
 // AttachCommand submits one command to the broker and returns its output and status.
 func AttachCommand(path, command string) ([]byte, int, error) {
+	response, err := sendAttachRequest(path, attachRequest{Command: command})
+	return response.Output, response.ExitCode, err
+}
+
+// StopDebugSocket asks a paused debug-socket session to resume.
+func StopDebugSocket(path string) error {
+	_, err := sendAttachRequest(path, attachRequest{Stop: true})
+	return err
+}
+
+func sendAttachRequest(path string, request attachRequest) (attachResponse, error) {
 	conn, err := net.Dial("unix", path)
 	if err != nil {
-		return nil, 0, fmt.Errorf("cannot connect to attach socket: %v", err)
+		return attachResponse{}, fmt.Errorf("cannot connect to debug socket: %v", err)
 	}
 	defer conn.Close()
 
-	if err := json.NewEncoder(conn).Encode(attachRequest{Command: command}); err != nil {
-		return nil, 0, fmt.Errorf("cannot send attach command: %v", err)
+	if err := json.NewEncoder(conn).Encode(request); err != nil {
+		return attachResponse{}, fmt.Errorf("cannot send debug socket request: %v", err)
 	}
 	var response attachResponse
 	if err := json.NewDecoder(conn).Decode(&response); err != nil {
-		return nil, 0, fmt.Errorf("cannot read attach response: %v", err)
+		return attachResponse{}, fmt.Errorf("cannot read debug socket response: %v", err)
 	}
 	if response.Error != "" {
-		return response.Output, response.ExitCode, fmt.Errorf("%s", response.Error)
+		return response, fmt.Errorf("%s", response.Error)
 	}
-	return response.Output, response.ExitCode, nil
+	return response, nil
 }

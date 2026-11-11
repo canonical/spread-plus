@@ -29,7 +29,7 @@ type Options struct {
 	Reuse          bool
 	ReusePid       int
 	Debug          bool
-	Attach         bool
+	DebugSocket    bool
 	NoDebug        bool
 	Shell          bool
 	ShellBefore    bool
@@ -78,8 +78,8 @@ type Runner struct {
 }
 
 func Start(project *Project, options *Options) (*Runner, error) {
-	if options.Attach && !options.Debug && !options.Shell {
-		return nil, fmt.Errorf("an attach socket requires -debug or -shell")
+	if options.DebugSocket && (options.Debug || options.Shell || options.ShellBefore || options.ShellAfter || options.Abend || options.Restore) {
+		return nil, fmt.Errorf("-debug-socket cannot be combined with other debug, shell, or restore modes")
 	}
 
 	r := &Runner{
@@ -556,7 +556,7 @@ func (r *Runner) run(client *Client, job *Job, verb string, context interface{},
 		// the original start time so the error message shows the task time.
 		start = start.Add(1)
 		printft(start, startTime|endTime|startFold|endFold, "Error %s %s (%s) : %v", verb, contextStr, server.Label(), err)
-		if debug != "" && !r.options.Live {
+		if (r.options.Debug || r.options.DebugSocket) && debug != "" && !r.options.Live {
 			var output []byte
 			start = time.Now()
 			output, err = client.Trace(debug, dir, job.Environment)
@@ -579,7 +579,11 @@ func (r *Runner) run(client *Client, job *Job, verb string, context interface{},
 				}
 			}
 		}
-		if r.options.Debug || r.options.ShellAfter {
+		if r.options.DebugSocket {
+			printf("Starting debug socket session...")
+			r.runDebugSocket(client, dir, r.shellEnv(job, job.Environment))
+			printf("Continuing...")
+		} else if r.options.Debug || r.options.ShellAfter {
 			printf("Starting shell to debug...")
 			r.runInteractiveShell(client, dir, r.shellEnv(job, job.Environment))
 			printf("Continuing...")
@@ -606,26 +610,29 @@ func (r *Runner) run(client *Client, job *Job, verb string, context interface{},
 	return true
 }
 
-// runInteractiveShell keeps the exec broker alive for the shell's lifetime.
-func (r *Runner) runInteractiveShell(client *Client, dir string, env *Environment) {
-	var broker *AttachBroker
-	if r.options.Attach {
-		var err error
-		broker, err = StartAttachBroker(r.attachPath(), client, dir, env)
-		if err != nil {
-			printf("Cannot enable Spread exec socket: %v", err)
-		} else {
-			printf("Run commands through this shell with: spread exec -- <command>")
-		}
+func (r *Runner) runDebugSocket(client *Client, dir string, env *Environment) {
+	broker, err := StartDebugSocketBroker(r.attachPath(), client, dir, env)
+	if err != nil {
+		printf("Cannot create debug socket: %v", err)
+		return
 	}
+	defer func() {
+		if err := broker.Close(); err != nil {
+			printf("Error closing debug socket: %v", err)
+		}
+	}()
 
+	printf("Debug socket session ready. Use `spread exec -- <command>` to run commands, then `spread stop` to continue.")
+	select {
+	case <-broker.StopRequested():
+	case <-r.tomb.Dying():
+	}
+}
+
+// runInteractiveShell opens an interactive shell on the worker.
+func (r *Runner) runInteractiveShell(client *Client, dir string, env *Environment) {
 	if err := client.Shell("", dir, env); err != nil {
 		printf("Error running debug shell: %v", err)
-	}
-	if broker != nil {
-		if err := broker.Close(); err != nil {
-			printf("Error closing Spread exec socket: %v", err)
-		}
 	}
 }
 

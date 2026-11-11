@@ -562,20 +562,25 @@ exact point you get a failure, with the exact same environment as the script
 had.  Exit the shell and the process continues, until the next failure, no
 matter which backend or system it was in.
 
-To let an agent run commands during the pause, pass `-attach` with `-debug` or
-`-shell`. Spread Plus creates a local `.spread.socket` in the project directory
-when that shell opens, and removes it when the shell exits:
+### Debug socket
+
+For a headless debug pause, use `-debug-socket` on its own. After a task fails,
+Spread creates `.spread.socket` without opening an interactive shell and prints
+that the session is ready. Run `spread exec` from the project directory to
+execute a command in the failing task's directory, then run `spread stop` to
+close the socket and continue the run:
 
 ```shell
-spread -debug -attach BACKEND:SYSTEM:TEST_PATH
+spread -debug-socket BACKEND:SYSTEM:TEST_PATH
 spread exec -- 'journalctl -u snapd --no-pager -n 100'
+spread stop
 ```
 
 The command runs in the failing task's directory and environment, and its
 output and exit status are returned directly. This does not share the paused
 shell's process state or terminal. The socket is accessible only to the local
 user; SSH credentials remain in Spread's memory and are not written to the
-socket or printed. `-attach` requires either `-debug` or `-shell`.
+socket or printed. `-debug-socket` cannot be combined with `-debug` or `-shell`.
 
 Similarly, `-shell`, `-shell-before`, and `-shell-after` allow running an
 interactive shell instead of, before, and after the original task script,
