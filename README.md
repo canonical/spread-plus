@@ -563,18 +563,13 @@ exact point you get a failure, with the exact same environment as the script
 had.  Exit the shell and the process continues, until the next failure, no
 matter which backend or system it was in.
 
-To let an agent run commands during the pause, pass `-attach` without a path.
-Spread Plus creates a local Unix socket beside the reuse file, using its
-identifier and the worker's machine name (for example,
-`.spread-reuse.1234.worker-name.socket` for `.spread-reuse.1234.yaml`). With
-persistent `-reuse`, the socket is named
-`.spread-reuse.worker-name.socket`. It creates the socket when a `-debug` shell
-opens after a failure, or when a `-shell` is opened, and removes it when the
-shell exits:
+To let an agent run commands during the pause, pass `-attach` with `-debug` or
+`-shell`. Spread Plus creates a local `.spread.socket` in the project directory
+when that shell opens, and removes it when the shell exits:
 
 ```shell
 spread -debug -attach BACKEND:SYSTEM:TEST_PATH
-spread attach .spread-reuse.1234.worker-name.socket -- 'journalctl -u snapd --no-pager -n 100'
+spread exec -- 'journalctl -u snapd --no-pager -n 100'
 ```
 
 The command runs in the failing task's directory and environment, and its
@@ -619,19 +614,12 @@ are aggregated and repeated for every task under them.
 
 ## Smoke test workflow
 
-The OpenStack amd64 smoke job in `.github/workflows/test.yaml` runs two focused
-checks in order on Ubuntu 22.04:
-
-1. `openstack:ubuntu-22.04-64:tests/reboot`
-2. `openstack:ubuntu-22.04-64:tests/attach`
-
-The attach task is restricted to Ubuntu 22.04 in `smoke/tests/attach/task.yaml`.
-The workflow helper in `smoke/lib/run-smoke.sh` starts the second check with
-`-shell -attach`, waits for the worker-specific socket, runs
-`cat /etc/os-release` through `spread attach`, and verifies `ID=ubuntu`. The
-reboot and attach checks use separate workers. Other smoke workflow jobs
-continue to run their configured broader test selectors.
-
+The OpenStack amd64 smoke job runs the reboot and attach checks on Ubuntu 22.04.
+The helper in `smoke/lib/run-smoke.sh` starts the attach check with
+`-shell -attach`, waits for `.spread.socket`, verifies that `spread exec -- pwd`
+returns the task directory, and runs `cat /etc/os-release` through
+`spread exec`. It checks the OS and verifies that the socket is removed when
+the shell closes.
 
 <a name="ordering">
 

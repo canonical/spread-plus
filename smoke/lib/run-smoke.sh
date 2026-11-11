@@ -6,9 +6,14 @@ selector=${2:?usage: smoke/lib/run-smoke.sh SPREAD_BINARY SELECTOR}
 temp_dir=$(mktemp -d)
 transcript="$temp_dir/spread-shell.log"
 input_fifo="$temp_dir/shell-input"
-os_release="$temp_dir/os-release"
+remote_pwd="$temp_dir/remote-pwd"
 shell_pid=""
 input_open=0
+
+if [[ -e .spread.socket ]]; then
+    echo "stale .spread.socket exists before starting the Spread shell" >&2
+    exit 1
+fi
 
 # cleanup exits any still-open Spread shell and removes the helper's temporary files.
 cleanup() {
@@ -21,7 +26,7 @@ cleanup() {
     if [[ -n "$shell_pid" ]]; then
         wait "$shell_pid" || true
     fi
-    rm -f "$transcript" "$input_fifo" "$os_release"
+    rm -f "$transcript" "$input_fifo" "$remote_pwd"
     rmdir "$temp_dir"
 }
 trap cleanup EXIT
@@ -36,31 +41,34 @@ shell_pid=$!
 exec 3> "$input_fifo"
 input_open=1
 
-# Wait until Spread reports the worker-specific socket and it exists locally.
-echo "Waiting for Spread to create the attach socket"
-socket=""
+# Wait for Spread to create the socket for the interactive shell.
+echo "Waiting for Spread to create the exec socket"
 for ((i = 0; i < 600; i++)); do
-    socket=$(sed -nE 's/.*spread attach ([^[:space:]]+) --.*/\1/p' "$transcript" | tail -n 1)
-    if [[ -n "$socket" && -S "$socket" ]]; then
+    if [[ -S .spread.socket ]]; then
         break
     fi
     if ! kill -0 "$shell_pid" 2>/dev/null; then
         cat "$transcript"
-        echo "spread exited before creating the attach socket" >&2
+        echo "spread exited before creating the exec socket" >&2
         exit 1
     fi
     sleep 1
 done
 
-if [[ -z "$socket" || ! -S "$socket" ]]; then
+if [[ ! -S .spread.socket ]]; then
     cat "$transcript"
-    echo "timed out waiting for the attach socket" >&2
+    echo "timed out waiting for the exec socket" >&2
     exit 1
 fi
 
-echo "Running cat /etc/os-release through the attach socket: $socket"
-"$spread_binary" attach "$socket" -- 'cat /etc/os-release' | tee "$os_release"
-grep -q '^ID=ubuntu$' "$os_release"
+task_path=${selector##*:}
+expected_pwd="/root/spread/$task_path"
+echo "Checking that the Spread shell is in its task directory: $expected_pwd"
+"$spread_binary" exec -- pwd | tee "$remote_pwd"
+if [[ $(<"$remote_pwd") != "$expected_pwd" ]]; then
+    echo "unexpected remote working directory: $(<"$remote_pwd")" >&2
+    exit 1
+fi
 
 # Exit the remote shell so Spread can close the socket and finish the run.
 echo "Closing the Spread shell"
@@ -69,3 +77,7 @@ exec 3>&-
 input_open=0
 wait "$shell_pid"
 shell_pid=""
+if [[ -e .spread.socket ]]; then
+    echo "Spread did not remove the exec socket when the shell closed" >&2
+    exit 1
+fi

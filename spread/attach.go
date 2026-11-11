@@ -14,6 +14,9 @@ import (
 
 const maxAttachRequestSize = 1 << 20
 
+// AttachSocketName is the local socket used by spread exec.
+const AttachSocketName = ".spread.socket"
+
 type attachRequest struct {
 	Command string
 }

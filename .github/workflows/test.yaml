@@ -150,7 +150,7 @@ jobs:
             set -o pipefail
             "${{ github.workspace }}/bin/spread-plus" openstack:ubuntu-22.04-64:tests/reboot | tee spread-reboot.log
           )
-          bash lib/run-smoke.sh \
+          ./lib/run-smoke.sh \
             "${{ github.workspace }}/bin/spread-plus" \
             openstack:ubuntu-22.04-64:tests/attach
 

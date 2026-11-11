@@ -150,32 +150,8 @@ func (r *Runner) reusePath() string {
 	return filepath.Join(r.project.Path, fmt.Sprintf(".spread-reuse.%d.yaml", os.Getpid()))
 }
 
-// attachPath combines the reuse-file ID with a sanitized machine label.
-func (r *Runner) attachPath(machineName string) string {
-	var safeName strings.Builder
-	for _, char := range machineName {
-		switch {
-		case char >= 'a' && char <= 'z',
-			char >= 'A' && char <= 'Z',
-			char >= '0' && char <= '9',
-			char == '-', char == '_', char == '.':
-			safeName.WriteRune(char)
-		default:
-			safeName.WriteByte('_')
-		}
-	}
-	name := strings.Trim(safeName.String(), ".")
-	if name == "" {
-		name = "machine"
-	}
-	filename := strings.TrimSuffix(filepath.Base(r.reusePath()), ".yaml") + "." + name + ".socket"
-	path := filepath.Join(r.project.Path, filename)
-	if workingDir, err := os.Getwd(); err == nil {
-		if relativePath, err := filepath.Rel(workingDir, path); err == nil {
-			return relativePath
-		}
-	}
-	return path
+func (r *Runner) attachPath() string {
+	return filepath.Join(r.project.Path, AttachSocketName)
 }
 
 type projectContent struct {
@@ -361,7 +337,7 @@ func (r *Runner) prepareContent() (err error) {
 		return fmt.Errorf("cannot remove temporary content file: %v", err)
 	}
 
-	args := []string{"c", "--exclude=.spread-reuse.*"}
+	args := []string{"c", "--exclude=.spread-reuse.*", "--exclude=" + AttachSocketName}
 	if r.project.Repack == "" {
 		args[0] = "cz"
 	}
@@ -630,25 +606,25 @@ func (r *Runner) run(client *Client, job *Job, verb string, context interface{},
 	return true
 }
 
-// runInteractiveShell keeps the attach broker alive for the shell's lifetime.
+// runInteractiveShell keeps the exec broker alive for the shell's lifetime.
 func (r *Runner) runInteractiveShell(client *Client, dir string, env *Environment) {
-	var attachBroker *AttachBroker
+	var broker *AttachBroker
 	if r.options.Attach {
-		broker, err := StartAttachBroker(r.attachPath(client.Server().Label()), client, dir, env)
+		var err error
+		broker, err = StartAttachBroker(r.attachPath(), client, dir, env)
 		if err != nil {
-			printf("Cannot enable agent SSH attach: %v", err)
+			printf("Cannot enable Spread exec socket: %v", err)
 		} else {
-			attachBroker = broker
-			printf("Agent commands can use a separate SSH connection with: spread attach %s -- <command>", broker.Path())
+			printf("Run commands through this shell with: spread exec -- <command>")
 		}
 	}
 
 	if err := client.Shell("", dir, env); err != nil {
 		printf("Error running debug shell: %v", err)
 	}
-	if attachBroker != nil {
-		if err := attachBroker.Close(); err != nil {
-			printf("Error closing agent SSH attach: %v", err)
+	if broker != nil {
+		if err := broker.Close(); err != nil {
+			printf("Error closing Spread exec socket: %v", err)
 		}
 	}
 }

@@ -2,7 +2,6 @@ package spread
 
 import (
 	"encoding/json"
-	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -111,41 +110,10 @@ func TestParseAgentCommandOutputWithoutTrailingNewline(t *testing.T) {
 	}
 }
 
-func TestAttachPathUsesReuseFileID(t *testing.T) {
-	tests := []struct {
-		name     string
-		options  *Options
-		expected string
-	}{
-		{
-			name:     "process id",
-			options:  &Options{},
-			expected: fmt.Sprintf(".spread-reuse.%d.machine_one.socket", os.Getpid()),
-		},
-		{
-			name:     "reuse",
-			options:  &Options{Reuse: true},
-			expected: ".spread-reuse.machine_one.socket",
-		},
-		{
-			name:     "reuse pid",
-			options:  &Options{ReusePid: 1234},
-			expected: ".spread-reuse.1234.machine_one.socket",
-		},
-	}
-
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			runner := &Runner{
-				project: &Project{Path: t.TempDir()},
-				options: test.options,
-			}
-			if got := filepath.Base(runner.attachPath("machine one")); got != test.expected {
-				t.Fatalf("unexpected attach path %q, want %q", got, test.expected)
-			}
-			if first, second := runner.attachPath("machine one"), runner.attachPath("machine two"); first == second {
-				t.Fatal("different machine names produced the same attach path")
-			}
-		})
+func TestAttachPathIsFixedInProjectRoot(t *testing.T) {
+	projectPath := t.TempDir()
+	runner := &Runner{project: &Project{Path: projectPath}}
+	if got, want := runner.attachPath(), filepath.Join(projectPath, AttachSocketName); got != want {
+		t.Fatalf("unexpected attach path %q, want %q", got, want)
 	}
 }

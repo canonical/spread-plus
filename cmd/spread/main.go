@@ -27,7 +27,7 @@ var (
 	reusePid       = flag.Int("reuse-pid", 0, "Reuse servers from crashed process")
 	resend         = flag.Bool("resend", false, "Resend project content to reused servers")
 	debug          = flag.Bool("debug", false, "Run shell after script errors")
-	attach         = flag.Bool("attach", false, "Create an agent attach socket (requires -debug or -shell)")
+	attach         = flag.Bool("attach", false, "Create an exec socket (requires -debug or -shell)")
 	noDebug        = flag.Bool("no-debug-output", false, "Debug output is saved to file")
 	shell          = flag.Bool("shell", false, "Run shell instead of task scripts")
 	shellBefore    = flag.Bool("shell-before", false, "Run shell before task scripts")
@@ -69,8 +69,8 @@ func (e *attachExitError) Error() string {
 }
 
 func run() error {
-	if len(os.Args) > 1 && os.Args[1] == "attach" {
-		return runAttach(os.Args[2:])
+	if len(os.Args) > 1 && os.Args[1] == "exec" {
+		return runExec(os.Args[2:])
 	}
 
 	mrand.Seed(time.Now().UnixNano())
@@ -177,12 +177,12 @@ func run() error {
 	return runner.Wait()
 }
 
-// runAttach sends a command to the socket created by a paused Spread shell.
-func runAttach(args []string) error {
-	if len(args) < 3 || args[1] != "--" {
-		return fmt.Errorf("usage: spread attach SOCKET -- COMMAND")
+// runExec sends a command to the socket created by a paused Spread shell.
+func runExec(args []string) error {
+	if len(args) < 2 || args[0] != "--" {
+		return fmt.Errorf("usage: spread exec -- COMMAND")
 	}
-	output, exitCode, err := spread.AttachCommand(args[0], strings.Join(args[2:], " "))
+	output, exitCode, err := spread.AttachCommand(spread.AttachSocketName, strings.Join(args[1:], " "))
 	if _, writeErr := os.Stdout.Write(output); writeErr != nil {
 		return fmt.Errorf("cannot write remote command output: %v", writeErr)
 	}

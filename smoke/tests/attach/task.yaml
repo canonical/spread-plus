@@ -1,6 +1,6 @@
-summary: Verify an attached command can read the running machine's os-release.
+summary: Verify an attached command runs in the task directory.
 
 systems: [ubuntu-22.04-64]
 
 execute: |
-    grep -q '^ID=ubuntu$' /etc/os-release
+    test "$(pwd)" = "$SPREAD_PATH/tests/attach"
