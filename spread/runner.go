@@ -54,9 +54,10 @@ type Runner struct {
 	tomb tomb.Tomb
 	mu   sync.Mutex
 
-	project   *Project
-	options   *Options
-	providers map[string]Provider
+	debugSocketMu sync.Mutex
+	project       *Project
+	options       *Options
+	providers     map[string]Provider
 
 	contentTomb tomb.Tomb
 	contentFile *os.File
@@ -154,6 +155,28 @@ func (r *Runner) attachPath() string {
 	return filepath.Join(r.project.Path, AttachSocketName)
 }
 
+func (r *Runner) workerCounts() (map[*System]int, int) {
+	workers := make(map[*System]int)
+	for _, backend := range r.project.Backends {
+		for _, system := range backend.Systems {
+			for _, job := range r.pending {
+				if job.Backend == backend && job.System == system {
+					if system.Workers > workers[system] {
+						workers[system]++
+					} else {
+						break
+					}
+				}
+			}
+		}
+	}
+	total := 0
+	for _, count := range workers {
+		total += count
+	}
+	return workers, total
+}
+
 type projectContent struct {
 	fd  *os.File
 	err error
@@ -220,21 +243,8 @@ func (r *Runner) loop() (err error) {
 	// Find out how many workers are needed for each backend system.
 	// Even if multiple workers per system are requested, must not
 	// have more workers than there are jobs.
-	workers := make(map[*System]int)
-	for _, backend := range r.project.Backends {
-		for _, system := range backend.Systems {
-			for _, job := range r.pending {
-				if job.Backend == backend && job.System == system {
-					if system.Workers > workers[system] {
-						workers[system]++
-						r.alive++
-					} else {
-						break
-					}
-				}
-			}
-		}
-	}
+	workers, alive := r.workerCounts()
+	r.alive = alive
 
 	// It is allowed showing the output when 1 worker is used at all
 	if r.options.Live {
@@ -611,6 +621,12 @@ func (r *Runner) run(client *Client, job *Job, verb string, context interface{},
 }
 
 func (r *Runner) runDebugSocket(client *Client, dir string, env *Environment) {
+	if !r.debugSocketMu.TryLock() {
+		printf("Waiting for the previous debug socket session to finish...")
+		r.debugSocketMu.Lock()
+	}
+	defer r.debugSocketMu.Unlock()
+
 	broker, err := StartDebugSocketBroker(r.attachPath(), client, dir, env)
 	if err != nil {
 		printf("Cannot create debug socket: %v", err)

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestAttachCommand(t *testing.T) {
@@ -92,6 +93,49 @@ func TestStopDebugSocket(t *testing.T) {
 	}
 }
 
+func TestDebugSocketSessionsWaitForPreviousSession(t *testing.T) {
+	runner := &Runner{project: &Project{Path: t.TempDir()}}
+	path := runner.attachPath()
+	done := make(chan struct{}, 2)
+
+	startSession := func() {
+		go func() {
+			runner.runDebugSocket(nil, "", NewEnvironment())
+			done <- struct{}{}
+		}()
+	}
+	waitForSocket := func() {
+		t.Helper()
+		deadline := time.Now().Add(3 * time.Second)
+		for time.Now().Before(deadline) {
+			if info, err := os.Stat(path); err == nil && info.Mode()&os.ModeSocket != 0 {
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		t.Fatalf("debug socket %q was not created", path)
+	}
+
+	startSession()
+	waitForSocket()
+	startSession()
+	select {
+	case <-done:
+		t.Fatal("second debug session returned before the first session stopped")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	if err := StopDebugSocket(path); err != nil {
+		t.Fatal(err)
+	}
+	<-done
+	waitForSocket()
+	if err := StopDebugSocket(path); err != nil {
+		t.Fatal(err)
+	}
+	<-done
+}
+
 func TestStartRejectsDebugSocketWithInteractiveModes(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -106,6 +150,44 @@ func TestStartRejectsDebugSocketWithInteractiveModes(t *testing.T) {
 				t.Fatal("expected incompatible debug-socket mode error")
 			}
 		})
+	}
+}
+
+func TestWorkerCountsIncludesConcurrentSystems(t *testing.T) {
+	firstSystem := &System{Name: "first", Workers: 1}
+	secondSystem := &System{Name: "second", Workers: 1}
+	backend := &Backend{
+		Name: "backend",
+		Systems: map[string]*System{
+			"first":  firstSystem,
+			"second": secondSystem,
+		},
+	}
+	runner := &Runner{
+		project: &Project{Backends: map[string]*Backend{"backend": backend}},
+		pending: []*Job{
+			{Backend: backend, System: firstSystem},
+			{Backend: backend, System: secondSystem},
+		},
+	}
+
+	_, count := runner.workerCounts()
+	if count != 2 {
+		t.Fatalf("unexpected worker count %d, want 2", count)
+	}
+}
+
+func TestWorkerCountsCapsAtSelectedJobs(t *testing.T) {
+	system := &System{Name: "system", Workers: 4}
+	backend := &Backend{Name: "backend", Systems: map[string]*System{"system": system}}
+	runner := &Runner{
+		project: &Project{Backends: map[string]*Backend{"backend": backend}},
+		pending: []*Job{{Backend: backend, System: system}},
+	}
+
+	_, count := runner.workerCounts()
+	if count != 1 {
+		t.Fatalf("unexpected worker count %d, want 1", count)
 	}
 }
 

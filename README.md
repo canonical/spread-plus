@@ -568,7 +568,9 @@ For a headless debug pause, use `-debug-socket` on its own. After a task fails,
 Spread creates `.spread.socket` without opening an interactive shell and prints
 that the session is ready. Run `spread exec` from the project directory to
 execute a command in the failing task's directory, then run `spread stop` to
-close the socket and continue the run:
+close the socket and continue the run. Workers may encounter failures
+concurrently; debug-socket sessions wait for the previous session to stop
+before opening the same `.spread.socket`:
 
 ```shell
 spread -debug-socket BACKEND:SYSTEM:TEST_PATH
