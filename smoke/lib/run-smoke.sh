@@ -26,7 +26,7 @@ trap cleanup EXIT
 
 : > "$transcript"
 echo "Starting Spread debug-socket session for $selector"
-"$spread_binary" -debug-socket "$selector" 2>&1 | tee "$transcript" &
+"$spread_binary" -debug-socket "$selector" > >(tee "$transcript") 2>&1 &
 spread_pid=$!
 
 echo "Waiting for Spread to create the debug socket"

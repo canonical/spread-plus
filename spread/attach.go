@@ -1,6 +1,7 @@
 package spread
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -28,9 +29,13 @@ type attachResponse struct {
 	Error    string
 }
 
+type agentCommandRunner interface {
+	AgentCommandContext(context.Context, string, string, *Environment) ([]byte, int, error)
+}
+
 // AttachBroker serves agent commands over a local socket using the worker's SSH credentials.
 type AttachBroker struct {
-	client    *Client
+	client    agentCommandRunner
 	dir       string
 	env       *Environment
 	path      string
@@ -38,8 +43,10 @@ type AttachBroker struct {
 	done      chan struct{}
 	stop      chan struct{}
 	stopOnce  sync.Once
+	closed    bool
 	mu        sync.Mutex
 	conns     map[net.Conn]struct{}
+	cancels   map[net.Conn]context.CancelFunc
 	handlers  sync.WaitGroup
 	closeOnce sync.Once
 	closeErr  error
@@ -82,6 +89,7 @@ func StartDebugSocketBroker(path string, client *Client, dir string, env *Enviro
 		done:     make(chan struct{}),
 		stop:     make(chan struct{}),
 		conns:    make(map[net.Conn]struct{}),
+		cancels:  make(map[net.Conn]context.CancelFunc),
 	}
 	go broker.serve()
 	return broker, nil
@@ -100,18 +108,30 @@ func (b *AttachBroker) StopRequested() <-chan struct{} {
 // Close stops accepting commands, waits for active handlers, and removes the socket.
 func (b *AttachBroker) Close() error {
 	b.closeOnce.Do(func() {
+		b.mu.Lock()
+		b.closed = true
+		b.mu.Unlock()
+
 		if err := b.listener.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
 			b.closeErr = fmt.Errorf("cannot close attach socket: %v", err)
 		}
 		<-b.done
 
 		b.mu.Lock()
+		// Cancel SSH commands before waiting for handlers to finish.
+		for _, cancel := range b.cancels {
+			cancel()
+		}
 		for conn := range b.conns {
 			conn.Close()
 		}
 		b.mu.Unlock()
 		b.handlers.Wait()
 
+		if err := os.Remove(b.path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			removeErr := fmt.Errorf("cannot remove debug socket %s: %w", b.path, err)
+			b.closeErr = errors.Join(b.closeErr, removeErr)
+		}
 	})
 	return b.closeErr
 }
@@ -135,7 +155,8 @@ func (b *AttachBroker) serve() {
 	}
 }
 
-// handle runs one requested command on the worker over a separate SSH connection.
+// handle processes a local command or stop request and returns command results to the client.
+// Its tracked context lets broker shutdown interrupt in-flight SSH work.
 func (b *AttachBroker) handle(conn net.Conn) {
 	defer b.handlers.Done()
 	defer func() {
@@ -150,6 +171,7 @@ func (b *AttachBroker) handle(conn net.Conn) {
 		return
 	}
 	var request attachRequest
+	// Bound the request size so a local client cannot send an unbounded payload.
 	if err := json.NewDecoder(io.LimitReader(conn, maxAttachRequestSize)).Decode(&request); err != nil {
 		writeAttachResponse(conn, attachResponse{Error: fmt.Sprintf("invalid attach request: %v", err)})
 		return
@@ -158,6 +180,7 @@ func (b *AttachBroker) handle(conn net.Conn) {
 		printf("Error clearing agent attach request deadline: %v", err)
 		return
 	}
+	// A stop request acknowledges the client and releases the paused runner.
 	if request.Stop {
 		writeAttachResponse(conn, attachResponse{})
 		b.stopOnce.Do(func() { close(b.stop) })
@@ -168,7 +191,25 @@ func (b *AttachBroker) handle(conn net.Conn) {
 		return
 	}
 
-	output, exitCode, err := b.client.AgentCommand(request.Command, b.dir, b.env.Copy())
+	ctx, cancel := context.WithCancel(context.Background())
+	b.mu.Lock()
+	// Register cancellation before starting SSH so Close can interrupt the command.
+	if b.closed {
+		b.mu.Unlock()
+		cancel()
+		return
+	}
+	b.cancels[conn] = cancel
+	b.mu.Unlock()
+
+	// The context lets broker shutdown interrupt this SSH command.
+	output, exitCode, err := b.client.AgentCommandContext(ctx, request.Command, b.dir, b.env.Copy())
+	cancel()
+	b.mu.Lock()
+	delete(b.cancels, conn)
+	b.mu.Unlock()
+
+	// Preserve command output and exit status even when the SSH call also returns an error.
 	response := attachResponse{Output: output, ExitCode: exitCode}
 	if err != nil {
 		response.Error = err.Error()

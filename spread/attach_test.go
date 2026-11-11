@@ -1,13 +1,27 @@
 package spread
 
 import (
+	"context"
 	"encoding/json"
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
+
+type blockingAgentCommandRunner struct {
+	started  chan struct{}
+	finished chan struct{}
+}
+
+func (r *blockingAgentCommandRunner) AgentCommandContext(ctx context.Context, _, _ string, _ *Environment) ([]byte, int, error) {
+	close(r.started)
+	defer close(r.finished)
+	<-ctx.Done()
+	return nil, 0, ctx.Err()
+}
 
 func TestAttachCommand(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "attach.sock")
@@ -53,6 +67,7 @@ func TestAttachBrokerSocketPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	broker.listener.SetUnlinkOnClose(false)
 
 	socketInfo, err := os.Stat(broker.Path())
 	if err != nil {
@@ -66,6 +81,29 @@ func TestAttachBrokerSocketPermissions(t *testing.T) {
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("expected attach socket to be removed, got %v", err)
+	}
+}
+
+func TestDebugSocketCloseReportsRemovalError(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "debug.sock")
+	broker, err := StartDebugSocketBroker(path, nil, "", NewEnvironment())
+	if err != nil {
+		t.Fatal(err)
+	}
+	broker.listener.SetUnlinkOnClose(false)
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(path, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(path, "keep"), nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	err = broker.Close()
+	if err == nil || !strings.Contains(err.Error(), "cannot remove debug socket") {
+		t.Fatalf("expected socket removal error, got %v", err)
 	}
 }
 
@@ -150,6 +188,53 @@ func TestStartRejectsDebugSocketWithInteractiveModes(t *testing.T) {
 				t.Fatal("expected incompatible debug-socket mode error")
 			}
 		})
+	}
+}
+
+func TestBrokerCloseCancelsInFlightCommand(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "debug.sock")
+	broker, err := StartDebugSocketBroker(path, nil, "", NewEnvironment())
+	if err != nil {
+		t.Fatal(err)
+	}
+	commandRunner := &blockingAgentCommandRunner{
+		started:  make(chan struct{}),
+		finished: make(chan struct{}),
+	}
+	broker.client = commandRunner
+
+	commandDone := make(chan error, 1)
+	go func() {
+		_, _, err := AttachCommand(path, "long-running-command")
+		commandDone <- err
+	}()
+	select {
+	case <-commandRunner.started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("agent command did not start")
+	}
+
+	closeDone := make(chan error, 1)
+	go func() {
+		closeDone <- broker.Close()
+	}()
+	select {
+	case err := <-closeDone:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("broker close waited for the in-flight command")
+	}
+	select {
+	case <-commandRunner.finished:
+	case <-time.After(2 * time.Second):
+		t.Fatal("broker close did not cancel the in-flight command")
+	}
+	select {
+	case <-commandDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("exec client did not return after broker close")
 	}
 }
 

@@ -2,6 +2,7 @@ package spread
 
 import (
 	"bytes"
+	stdcontext "context"
 	"crypto/rand"
 	"fmt"
 	"io"
@@ -328,16 +329,47 @@ func (c *Client) NewConnection() (*Client, error) {
 
 // AgentCommand runs a script on a fresh SSH connection and captures its output and exit status.
 func (c *Client) AgentCommand(script string, dir string, env *Environment) (output []byte, exitCode int, err error) {
+	return c.AgentCommandContext(stdcontext.Background(), script, dir, env)
+}
+
+// AgentCommandContext closes its SSH connection when ctx is canceled.
+func (c *Client) AgentCommandContext(ctx stdcontext.Context, script string, dir string, env *Environment) (output []byte, exitCode int, err error) {
+	if err := ctx.Err(); err != nil {
+		return nil, 0, err
+	}
 	client, err := c.NewConnection()
 	if err != nil {
 		return nil, 0, err
 	}
+	done := make(chan struct{})
+	watcherDone := make(chan struct{})
+	var closeOnce sync.Once
+	var closeErr error
+	closeClient := func() {
+		closeOnce.Do(func() {
+			closeErr = client.Close()
+		})
+	}
+	go func() {
+		defer close(watcherDone)
+		select {
+		case <-ctx.Done():
+			closeClient()
+		case <-done:
+		}
+	}()
 	defer func() {
-		if closeErr := client.Close(); closeErr != nil && err == nil {
+		close(done)
+		<-watcherDone
+		closeClient()
+		if closeErr != nil && err == nil {
 			err = fmt.Errorf("cannot close agent SSH connection: %v", closeErr)
 		}
 	}()
 
+	if err := ctx.Err(); err != nil {
+		return nil, 0, err
+	}
 	var token [16]byte
 	if _, err := rand.Read(token[:]); err != nil {
 		return nil, 0, fmt.Errorf("cannot generate command status token: %v", err)
