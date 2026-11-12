@@ -50,7 +50,7 @@ var (
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		var attachErr *attachExitError
+		var attachErr *attachedExitError
 		if errors.As(err, &attachErr) {
 			os.Exit(attachErr.status)
 		}
@@ -58,13 +58,13 @@ func main() {
 	}
 }
 
-// attachExitError preserves the exit status returned by an attached command.
-type attachExitError struct {
+// attachedExitError preserves the exit status returned by an attached command.
+type attachedExitError struct {
 	status int
 }
 
 // Error describes a nonzero exit status from the remote command.
-func (e *attachExitError) Error() string {
+func (e *attachedExitError) Error() string {
 	return fmt.Sprintf("remote command exited with status %d", e.status)
 }
 
@@ -178,10 +178,10 @@ func run() error {
 
 // runExec sends a command to the socket created by a paused Spread shell.
 func runExec(args []string) error {
-	if len(args) < 2 || args[0] != "--" {
-		return fmt.Errorf("usage: spread exec -- COMMAND")
+	if len(args) < 3 || args[1] != "--" {
+		return fmt.Errorf("usage: spread exec SOCKET -- COMMAND")
 	}
-	output, exitCode, err := spread.AttachCommand(spread.AttachSocketName, strings.Join(args[1:], " "))
+	output, exitCode, err := spread.AttachCommand(args[0], strings.Join(args[2:], " "))
 	if _, writeErr := os.Stdout.Write(output); writeErr != nil {
 		return fmt.Errorf("cannot write remote command output: %v", writeErr)
 	}
@@ -189,16 +189,16 @@ func runExec(args []string) error {
 		return err
 	}
 	if exitCode != 0 {
-		return &attachExitError{status: exitCode}
+		return &attachedExitError{status: exitCode}
 	}
 	return nil
 }
 
 func runStop(args []string) error {
-	if len(args) != 0 {
-		return fmt.Errorf("usage: spread stop")
+	if len(args) != 1 {
+		return fmt.Errorf("usage: spread stop SOCKET")
 	}
-	return spread.StopDebugSocket(spread.AttachSocketName)
+	return spread.StopDebugSocket(args[0])
 }
 
 func printf(format string, v ...interface{}) {

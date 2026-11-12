@@ -565,24 +565,26 @@ matter which backend or system it was in.
 ### Debug socket
 
 For a headless debug pause, use `-debug-socket` on its own. After a task fails,
-Spread creates `.spread.socket` without opening an interactive shell and prints
-that the session is ready. Run `spread exec` from the project directory to
-execute a command in the failing task's directory, then run `spread stop` to
-close the socket and continue the run. Workers may encounter failures
-concurrently; debug-socket sessions wait for the previous session to stop
-before opening the same `.spread.socket`:
+Spread creates a socket named `.spread-<jobid>-<machine>.socket` without
+opening an interactive shell and prints its path and the commands to use it.
+Run `spread exec SOCKET -- COMMAND` from the project directory to execute a
+command in the failing task's directory, then run `spread stop SOCKET` to close
+that socket and continue the run. Each run and worker gets its own socket, so
+multiple debug sessions can be active at the same time:
 
 ```shell
 spread -debug-socket BACKEND:SYSTEM:TEST_PATH
-spread exec -- 'journalctl -u snapd --no-pager -n 100'
-spread stop
+spread exec .spread-<jobid>-<machine>.socket -- 'journalctl -u snapd --no-pager -n 100'
+spread stop .spread-<jobid>-<machine>.socket
 ```
 
 The command runs in the failing task's directory and environment, and its
 output and exit status are returned directly. This does not share the paused
 shell's process state or terminal. The socket is accessible only to the local
 user; SSH credentials remain in Spread's memory and are not written to the
-socket or printed. `-debug-socket` cannot be combined with `-debug` or `-shell`.
+socket or printed. If Spread is killed, its socket file may remain, but the
+unique job ID prevents it from blocking later runs. `-debug-socket` cannot be
+combined with `-debug` or `-shell`.
 
 Similarly, `-shell`, `-shell-before`, and `-shell-after` allow running an
 interactive shell instead of, before, and after the original task script,

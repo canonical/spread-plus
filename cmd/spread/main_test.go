@@ -20,14 +20,15 @@ func TestRunExecWithoutSocket(t *testing.T) {
 		}
 	}()
 
-	err = runExec([]string{"--", "pwd"})
+	socket := ".spread-reuse.missing.machine.socket"
+	err = runExec([]string{socket, "--", "pwd"})
 	if err == nil {
 		t.Fatal("expected an error when the exec socket does not exist")
 	}
 	if !strings.Contains(err.Error(), "cannot connect to debug socket") {
 		t.Fatalf("unexpected error %q", err)
 	}
-	if err := runStop(nil); err == nil || !strings.Contains(err.Error(), "cannot connect to debug socket") {
+	if err := runStop([]string{socket}); err == nil || !strings.Contains(err.Error(), "cannot connect to debug socket") {
 		t.Fatalf("expected spread stop to report a missing debug socket, got %v", err)
 	}
 }
@@ -37,17 +38,17 @@ func TestRunExecRequiresCommand(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected a usage error")
 	}
-	if got, want := err.Error(), "usage: spread exec -- COMMAND"; got != want {
+	if got, want := err.Error(), "usage: spread exec SOCKET -- COMMAND"; got != want {
 		t.Fatalf("unexpected error %q, want %q", got, want)
 	}
 }
 
-func TestRunStopRequiresNoArguments(t *testing.T) {
-	err := runStop([]string{"extra"})
+func TestRunStopRequiresSocket(t *testing.T) {
+	err := runStop(nil)
 	if err == nil {
 		t.Fatal("expected a usage error")
 	}
-	if got, want := err.Error(), "usage: spread stop"; got != want {
+	if got, want := err.Error(), "usage: spread stop SOCKET"; got != want {
 		t.Fatalf("unexpected error %q, want %q", got, want)
 	}
 }

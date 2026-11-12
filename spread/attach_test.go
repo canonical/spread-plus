@@ -131,18 +131,33 @@ func TestStopDebugSocket(t *testing.T) {
 	}
 }
 
-func TestDebugSocketSessionsWaitForPreviousSession(t *testing.T) {
-	runner := &Runner{project: &Project{Path: t.TempDir()}}
-	path := runner.attachPath()
-	done := make(chan struct{}, 2)
+func TestDebugSocketSessionsUseSeparateSockets(t *testing.T) {
+	projectPath, err := os.MkdirTemp(".", "debug-socket-test-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.RemoveAll(projectPath); err != nil {
+			t.Errorf("cannot remove temporary project directory: %v", err)
+		}
+	})
+	runner := &Runner{runID: "test-run", project: &Project{Path: projectPath}}
+	secondRun := &Runner{runID: "other-run", project: runner.project}
+	firstPath := runner.attachPath("machine one")
+	secondPath := runner.attachPath("machine two")
+	thirdPath := secondRun.attachPath("machine one")
+	if firstPath == secondPath || firstPath == thirdPath {
+		t.Fatal("different machines or runs produced the same attach socket path")
+	}
+	done := make(chan struct{}, 3)
 
-	startSession := func() {
+	startSession := func(runner *Runner, machineName string) {
 		go func() {
-			runner.runDebugSocket(nil, "", NewEnvironment())
+			runner.runDebugSocket(nil, machineName, "", NewEnvironment())
 			done <- struct{}{}
 		}()
 	}
-	waitForSocket := func() {
+	waitForSocket := func(path string) {
 		t.Helper()
 		deadline := time.Now().Add(3 * time.Second)
 		for time.Now().Before(deadline) {
@@ -154,24 +169,34 @@ func TestDebugSocketSessionsWaitForPreviousSession(t *testing.T) {
 		t.Fatalf("debug socket %q was not created", path)
 	}
 
-	startSession()
-	waitForSocket()
-	startSession()
-	select {
-	case <-done:
-		t.Fatal("second debug session returned before the first session stopped")
-	case <-time.After(100 * time.Millisecond):
-	}
+	startSession(runner, "machine one")
+	startSession(runner, "machine two")
+	startSession(secondRun, "machine one")
+	waitForSocket(firstPath)
+	waitForSocket(secondPath)
+	waitForSocket(thirdPath)
 
-	if err := StopDebugSocket(path); err != nil {
+	if err := StopDebugSocket(firstPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := StopDebugSocket(secondPath); err != nil {
+		t.Fatal(err)
+	}
+	if err := StopDebugSocket(thirdPath); err != nil {
 		t.Fatal(err)
 	}
 	<-done
-	waitForSocket()
-	if err := StopDebugSocket(path); err != nil {
-		t.Fatal(err)
-	}
 	<-done
+	<-done
+	if _, err := os.Stat(firstPath); !os.IsNotExist(err) {
+		t.Fatalf("expected first debug socket to be removed, got %v", err)
+	}
+	if _, err := os.Stat(secondPath); !os.IsNotExist(err) {
+		t.Fatalf("expected second debug socket to be removed, got %v", err)
+	}
+	if _, err := os.Stat(thirdPath); !os.IsNotExist(err) {
+		t.Fatalf("expected third debug socket to be removed, got %v", err)
+	}
 }
 
 func TestStartRejectsDebugSocketWithInteractiveModes(t *testing.T) {
@@ -318,10 +343,14 @@ func TestParseAgentCommandOutputWithoutTrailingNewline(t *testing.T) {
 	}
 }
 
-func TestAttachPathIsFixedInProjectRoot(t *testing.T) {
+func TestAttachPathUsesRunIDAndSanitizedMachineName(t *testing.T) {
 	projectPath := t.TempDir()
-	runner := &Runner{project: &Project{Path: projectPath}}
-	if got, want := runner.attachPath(), filepath.Join(projectPath, AttachSocketName); got != want {
+	runner := &Runner{runID: "1234", project: &Project{Path: projectPath}}
+	if got, want := filepath.Base(runner.attachPath("machine one")), ".spread-1234-machine_one.socket"; got != want {
 		t.Fatalf("unexpected attach path %q, want %q", got, want)
+	}
+	secondRun := &Runner{runID: "5678", project: runner.project}
+	if runner.attachPath("machine one") == secondRun.attachPath("machine one") {
+		t.Fatal("different run IDs produced the same attach socket path")
 	}
 }

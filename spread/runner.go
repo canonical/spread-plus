@@ -54,10 +54,10 @@ type Runner struct {
 	tomb tomb.Tomb
 	mu   sync.Mutex
 
-	debugSocketMu sync.Mutex
-	project       *Project
-	options       *Options
-	providers     map[string]Provider
+	runID     string
+	project   *Project
+	options   *Options
+	providers map[string]Provider
 
 	contentTomb tomb.Tomb
 	contentFile *os.File
@@ -84,6 +84,7 @@ func Start(project *Project, options *Options) (*Runner, error) {
 	}
 
 	r := &Runner{
+		runID:     fmt.Sprintf("%d", os.Getpid()),
 		project:   project,
 		options:   options,
 		providers: make(map[string]Provider),
@@ -151,8 +152,32 @@ func (r *Runner) reusePath() string {
 	return filepath.Join(r.project.Path, fmt.Sprintf(".spread-reuse.%d.yaml", os.Getpid()))
 }
 
-func (r *Runner) attachPath() string {
-	return filepath.Join(r.project.Path, AttachSocketName)
+// attachPath returns a run- and machine-specific socket path for debug commands.
+func (r *Runner) attachPath(machineName string) string {
+	var safeName strings.Builder
+	for _, char := range machineName {
+		switch {
+		case char >= 'a' && char <= 'z',
+			char >= 'A' && char <= 'Z',
+			char >= '0' && char <= '9',
+			char == '-', char == '_', char == '.':
+			safeName.WriteRune(char)
+		default:
+			safeName.WriteByte('_')
+		}
+	}
+	name := strings.Trim(safeName.String(), ".")
+	if name == "" {
+		name = "machine"
+	}
+	filename := fmt.Sprintf(".spread-%s-%s.socket", r.runID, name)
+	path := filepath.Join(r.project.Path, filename)
+	if workingDir, err := os.Getwd(); err == nil {
+		if relativePath, err := filepath.Rel(workingDir, path); err == nil {
+			return relativePath
+		}
+	}
+	return path
 }
 
 func (r *Runner) workerCounts() (map[*System]int, int) {
@@ -347,7 +372,7 @@ func (r *Runner) prepareContent() (err error) {
 		return fmt.Errorf("cannot remove temporary content file: %v", err)
 	}
 
-	args := []string{"c", "--exclude=.spread-reuse.*", "--exclude=" + AttachSocketName}
+	args := []string{"c", "--exclude=.spread-reuse.*"}
 	if r.project.Repack == "" {
 		args[0] = "cz"
 	}
@@ -591,7 +616,7 @@ func (r *Runner) run(client *Client, job *Job, verb string, context interface{},
 		}
 		if r.options.DebugSocket {
 			printf("Starting debug socket session...")
-			r.runDebugSocket(client, dir, r.shellEnv(job, job.Environment))
+			r.runDebugSocket(client, client.Server().Label(), dir, r.shellEnv(job, job.Environment))
 			printf("Continuing...")
 		} else if r.options.Debug || r.options.ShellAfter {
 			printf("Starting shell to debug...")
@@ -620,14 +645,8 @@ func (r *Runner) run(client *Client, job *Job, verb string, context interface{},
 	return true
 }
 
-func (r *Runner) runDebugSocket(client *Client, dir string, env *Environment) {
-	if !r.debugSocketMu.TryLock() {
-		printf("Waiting for the previous debug socket session to finish...")
-		r.debugSocketMu.Lock()
-	}
-	defer r.debugSocketMu.Unlock()
-
-	broker, err := StartDebugSocketBroker(r.attachPath(), client, dir, env)
+func (r *Runner) runDebugSocket(client *Client, machineName, dir string, env *Environment) {
+	broker, err := StartDebugSocketBroker(r.attachPath(machineName), client, dir, env)
 	if err != nil {
 		printf("Cannot create debug socket: %v", err)
 		return
@@ -638,7 +657,8 @@ func (r *Runner) runDebugSocket(client *Client, dir string, env *Environment) {
 		}
 	}()
 
-	printf("Debug socket session ready. Use `spread exec -- <command>` to run commands, then `spread stop` to continue.")
+	printf("Debug socket session ready at %q. Use `spread exec <socket> -- <command>` to run commands, then `spread stop <socket>` to continue.",
+		broker.Path())
 	select {
 	case <-broker.StopRequested():
 	case <-r.tomb.Dying():
