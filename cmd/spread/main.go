@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/rand"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -26,6 +27,7 @@ var (
 	reusePid       = flag.Int("reuse-pid", 0, "Reuse servers from crashed process")
 	resend         = flag.Bool("resend", false, "Resend project content to reused servers")
 	debug          = flag.Bool("debug", false, "Run shell after script errors")
+	debugSocket    = flag.Bool("debug-socket", false, "Pause after task errors for socket-based debugging")
 	noDebug        = flag.Bool("no-debug-output", false, "Debug output is saved to file")
 	shell          = flag.Bool("shell", false, "Run shell instead of task scripts")
 	shellBefore    = flag.Bool("shell-before", false, "Run shell before task scripts")
@@ -48,11 +50,32 @@ var (
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		var attachErr *attachedExitError
+		if errors.As(err, &attachErr) {
+			os.Exit(attachErr.status)
+		}
 		os.Exit(1)
 	}
 }
 
+// attachedExitError preserves the exit status returned by an attached command.
+type attachedExitError struct {
+	status int
+}
+
+// Error describes a nonzero exit status from the remote command.
+func (e *attachedExitError) Error() string {
+	return fmt.Sprintf("remote command exited with status %d", e.status)
+}
+
 func run() error {
+	if len(os.Args) > 1 && os.Args[1] == "exec" {
+		return runExec(os.Args[2:])
+	}
+	if len(os.Args) > 1 && os.Args[1] == "continue" {
+		return runContinue(os.Args[2:])
+	}
+
 	mrand.Seed(time.Now().UnixNano())
 	flag.Parse()
 	if *showVersion {
@@ -65,14 +88,13 @@ func run() error {
 	spread.Debug = *vverbose
 
 	var other bool
-	for _, b := range []bool{*debug, *shell, *shellBefore || *shellAfter, *abend, *restore} {
+	for _, b := range []bool{*debug, *debugSocket, *shell, *shellBefore || *shellAfter, *abend, *restore} {
 		if b && other {
-			return fmt.Errorf("cannot have more than one of -debug, -shell, -shell-before/after, -abend, and -restore")
+			return fmt.Errorf("cannot have more than one of -debug, -debug-socket, -shell, -shell-before/after, -abend, and -restore")
 
 		}
 		other = other || b
 	}
-
 	password := *pass
 	if password == "" {
 		buf := make([]byte, 8)
@@ -99,6 +121,7 @@ func run() error {
 		ReusePid:       *reusePid,
 		Resend:         *resend,
 		Debug:          *debug,
+		DebugSocket:    *debugSocket,
 		NoDebug:        *noDebug,
 		Shell:          *shell,
 		ShellBefore:    *shellBefore,
@@ -151,6 +174,31 @@ func run() error {
 	}()
 
 	return runner.Wait()
+}
+
+// runExec sends a command to the socket created by a paused Spread shell.
+func runExec(args []string) error {
+	if len(args) < 3 || args[1] != "--" {
+		return fmt.Errorf("usage: spread exec SOCKET -- COMMAND")
+	}
+	output, exitCode, err := spread.AttachCommand(args[0], strings.Join(args[2:], " "))
+	if _, writeErr := os.Stdout.Write(output); writeErr != nil {
+		return fmt.Errorf("cannot write remote command output: %v", writeErr)
+	}
+	if err != nil {
+		return err
+	}
+	if exitCode != 0 {
+		return &attachedExitError{status: exitCode}
+	}
+	return nil
+}
+
+func runContinue(args []string) error {
+	if len(args) != 1 {
+		return fmt.Errorf("usage: spread continue SOCKET")
+	}
+	return spread.StopDebugSocket(args[0])
 }
 
 func printf(format string, v ...interface{}) {

@@ -562,6 +562,32 @@ exact point you get a failure, with the exact same environment as the script
 had.  Exit the shell and the process continues, until the next failure, no
 matter which backend or system it was in.
 
+### Debug socket
+
+For a headless debug pause, use `-debug-socket` on its own. After a task fails,
+Spread creates a socket named `.spread-<jobid>-<machine>.socket` without
+opening an interactive shell and prints its path and the commands to use it.
+Run `spread exec SOCKET -- COMMAND` from the project directory to execute a
+command in the failing task's directory, then run `spread continue SOCKET` to
+close that socket and continue the run. Each run and worker gets its own socket, so
+multiple debug sessions can be active at the same time:
+
+```shell
+spread -debug-socket BACKEND:SYSTEM:TEST_PATH
+
+# In a different terminal, since `spread -debug-socket` runs until all tests have finished
+spread exec .spread-<jobid>-<machine>.socket -- 'journalctl -u snapd --no-pager -n 100'
+spread continue .spread-<jobid>-<machine>.socket
+```
+
+The command runs in the failing task's directory and environment, and its
+output and exit status are returned directly. This does not share the paused
+shell's process state or terminal. The socket is accessible only to the local
+user; SSH credentials remain in Spread's memory and are not written to the
+socket or printed. If Spread is killed, its socket file may remain, but the
+unique job ID prevents it from blocking later runs. `-debug-socket` cannot be
+combined with `-debug` or `-shell`.
+
 Similarly, `-shell`, `-shell-before`, and `-shell-after` allow running an
 interactive shell instead of, before, and after the original task script,
 respectively, for every job that was selected to run. You'll most probably want
@@ -593,7 +619,6 @@ debug: |
 In a similar way to prepare and restore scripts, these can also be defined
 as a `debug-each` script at the project, backend, and suite levels, so they
 are aggregated and repeated for every task under them.
-
 
 <a name="ordering">
 

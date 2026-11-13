@@ -2,6 +2,8 @@ package spread
 
 import (
 	"bytes"
+	stdcontext "context"
+	"crypto/rand"
 	"fmt"
 	"io"
 	"os"
@@ -305,6 +307,109 @@ func (c *Client) Output(script string, dir string, env *Environment) (output []b
 
 func (c *Client) CombinedOutput(script string, dir string, env *Environment) (output []byte, err error) {
 	return c.run(script, dir, env, combinedOutput)
+}
+
+// NewConnection opens a separate SSH connection to the same worker with the same credentials.
+func (c *Client) NewConnection() (*Client, error) {
+	config := *c.config
+	sshc, err := sshDial("tcp", c.addr, &config)
+	if err != nil {
+		return nil, fmt.Errorf("cannot connect to %s: %v", c.server, err)
+	}
+	return &Client{
+		server:      c.server,
+		sshc:        sshc,
+		config:      &config,
+		addr:        c.addr,
+		job:         c.job,
+		warnTimeout: c.warnTimeout,
+		killTimeout: c.killTimeout,
+	}, nil
+}
+
+// AgentCommand runs a script on a fresh SSH connection and captures its output and exit status.
+func (c *Client) AgentCommand(script string, dir string, env *Environment) (output []byte, exitCode int, err error) {
+	return c.AgentCommandContext(stdcontext.Background(), script, dir, env)
+}
+
+// AgentCommandContext closes its SSH connection when ctx is canceled.
+func (c *Client) AgentCommandContext(ctx stdcontext.Context, script string, dir string, env *Environment) (output []byte, exitCode int, err error) {
+	if err := ctx.Err(); err != nil {
+		return nil, 0, err
+	}
+	client, err := c.NewConnection()
+	if err != nil {
+		return nil, 0, err
+	}
+	done := make(chan struct{})
+	watcherDone := make(chan struct{})
+	var closeOnce sync.Once
+	var closeErr error
+	closeClient := func() {
+		closeOnce.Do(func() {
+			closeErr = client.Close()
+		})
+	}
+	go func() {
+		defer close(watcherDone)
+		select {
+		case <-ctx.Done():
+			closeClient()
+		case <-done:
+		}
+	}()
+	defer func() {
+		close(done)
+		<-watcherDone
+		closeClient()
+		if closeErr != nil && err == nil {
+			err = fmt.Errorf("cannot close agent SSH connection: %v", closeErr)
+		}
+	}()
+
+	if err := ctx.Err(); err != nil {
+		return nil, 0, err
+	}
+	var token [16]byte
+	if _, err := rand.Read(token[:]); err != nil {
+		return nil, 0, fmt.Errorf("cannot generate command status token: %v", err)
+	}
+	marker := fmt.Sprintf("__SPREAD_ATTACH_EXIT_%x__=", token)
+	wrapped := fmt.Sprintf("set +e\n(\n%s\n)\nstatus=$?\nprintf '\\n%s%%s\\n' \"$status\"\n", script, marker)
+	output, err = client.CombinedOutput(wrapped, dir, env)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return parseAgentCommandOutput(output, marker)
+}
+
+// parseAgentCommandOutput extracts the exit status marker appended to an agent command.
+func parseAgentCommandOutput(output []byte, marker string) ([]byte, int, error) {
+	index := bytes.LastIndex(output, []byte(marker))
+	if index < 0 {
+		return nil, 0, fmt.Errorf("remote command did not return an exit status")
+	}
+	status := output[index+len(marker):]
+	if statusEnd := bytes.IndexByte(status, '\n'); statusEnd >= 0 {
+		status = status[:statusEnd]
+	}
+	status = bytes.TrimSpace(status)
+	if len(status) == 0 {
+		return nil, 0, fmt.Errorf("remote command returned an incomplete exit status")
+	}
+	exitCode, err := strconv.Atoi(string(status))
+	if err != nil {
+		return nil, 0, fmt.Errorf("remote command returned an invalid exit status: %v", err)
+	}
+	if exitCode < 0 || exitCode > 255 {
+		return nil, 0, fmt.Errorf("remote command returned an invalid exit status: %d", exitCode)
+	}
+	output = output[:index]
+	if len(output) > 0 && output[len(output)-1] == '\n' {
+		output = output[:len(output)-1]
+	}
+	return output, exitCode, nil
 }
 
 func (c *Client) Trace(script string, dir string, env *Environment) (output []byte, err error) {

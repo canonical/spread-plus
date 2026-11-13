@@ -1,0 +1,6 @@
+summary: Verify debug-socket commands run after a task failure.
+
+systems: [ubuntu-22.04-64]
+
+execute: |
+    false
