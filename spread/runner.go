@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	crand "crypto/rand"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -25,7 +26,8 @@ import (
 )
 
 const (
-	maxUnixSocketPathLen = 100
+	maxUnixSocketPathLen       = 100
+	maxDebugSocketMachineLabel = 15
 )
 
 type Options struct {
@@ -59,6 +61,7 @@ type Runner struct {
 	tomb tomb.Tomb
 	mu   sync.Mutex
 
+	runID     string
 	project   *Project
 	options   *Options
 	providers map[string]Provider
@@ -88,6 +91,7 @@ func Start(project *Project, options *Options) (*Runner, error) {
 	}
 
 	r := &Runner{
+		runID:     fmt.Sprintf("%d", os.Getpid()),
 		project:   project,
 		options:   options,
 		providers: make(map[string]Provider),
@@ -156,7 +160,7 @@ func (r *Runner) reusePath() string {
 }
 
 func newSocketID() (string, error) {
-	var id [16]byte
+	var id [8]byte
 	if _, err := crand.Read(id[:]); err != nil {
 		return "", fmt.Errorf("cannot generate debug socket ID: %v", err)
 	}
@@ -164,12 +168,32 @@ func newSocketID() (string, error) {
 }
 
 // attachPath returns a unique socket path for debug commands.
-func (r *Runner) attachPath() (string, error) {
+func (r *Runner) attachPath(machineName string) (string, error) {
 	socketID, err := newSocketID()
 	if err != nil {
 		return "", err
 	}
-	filename := fmt.Sprintf(".spread-%s.socket", socketID)
+	var safeName strings.Builder
+	for _, char := range machineName {
+		switch {
+		case char >= 'a' && char <= 'z',
+			char >= 'A' && char <= 'Z',
+			char >= '0' && char <= '9',
+			char == '-', char == '_', char == '.':
+			safeName.WriteRune(char)
+		default:
+			safeName.WriteByte('_')
+		}
+	}
+	name := strings.Trim(safeName.String(), ".")
+	if name == "" {
+		name = "machine"
+	}
+	if len(name) > maxDebugSocketMachineLabel {
+		hash := sha256.Sum256([]byte(machineName))
+		name = name[:6] + fmt.Sprintf("-%x", hash[:4])
+	}
+	filename := fmt.Sprintf(".spread-%s-%s-%s.socket", r.runID, name, socketID)
 	path := filepath.Join(r.project.Path, filename)
 	if workingDir, err := os.Getwd(); err == nil {
 		if relativePath, err := filepath.Rel(workingDir, path); err == nil {
@@ -650,7 +674,7 @@ func (r *Runner) run(client *Client, job *Job, verb string, context interface{},
 }
 
 func (r *Runner) runDebugSocket(client *Client, machineName, dir string, env *Environment) {
-	path, err := r.attachPath()
+	path, err := r.attachPath(machineName)
 	if err != nil {
 		printf("Cannot create debug socket path: %v", err)
 		return

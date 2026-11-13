@@ -141,17 +141,17 @@ func TestDebugSocketSessionsUseSeparateSockets(t *testing.T) {
 			t.Errorf("cannot remove temporary project directory: %v", err)
 		}
 	})
-	runner := &Runner{project: &Project{Path: projectPath}}
-	secondRun := &Runner{project: runner.project}
-	firstPath, err := runner.attachPath()
+	runner := &Runner{runID: "test-run", project: &Project{Path: projectPath}}
+	secondRun := &Runner{runID: "other-run", project: runner.project}
+	firstPath, err := runner.attachPath("machine one")
 	if err != nil {
 		t.Fatal(err)
 	}
-	secondPath, err := runner.attachPath()
+	secondPath, err := runner.attachPath("machine two")
 	if err != nil {
 		t.Fatal(err)
 	}
-	thirdPath, err := secondRun.attachPath()
+	thirdPath, err := secondRun.attachPath("machine one")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -352,14 +352,14 @@ func TestParseAgentCommandOutputWithoutTrailingNewline(t *testing.T) {
 	}
 }
 
-func TestAttachPathUsesRandomIDWithoutMachineName(t *testing.T) {
+func TestAttachPathUsesRunMachineAndSocketIDs(t *testing.T) {
 	projectPath := t.TempDir()
-	runner := &Runner{project: &Project{Path: projectPath}}
-	firstPath, err := runner.attachPath()
+	runner := &Runner{runID: "test-run", project: &Project{Path: projectPath}}
+	firstPath, err := runner.attachPath("machine one")
 	if err != nil {
 		t.Fatal(err)
 	}
-	secondPath, err := runner.attachPath()
+	secondPath, err := runner.attachPath("machine one")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -367,8 +367,8 @@ func TestAttachPathUsesRandomIDWithoutMachineName(t *testing.T) {
 	if !strings.HasPrefix(firstName, ".spread-") || !strings.HasSuffix(firstName, ".socket") {
 		t.Fatalf("unexpected attach socket path %q", firstPath)
 	}
-	if strings.Contains(firstName, "machine") {
-		t.Fatalf("attach socket path includes a machine name: %q", firstPath)
+	if !strings.Contains(firstName, "test-run-machine_one-") {
+		t.Fatalf("attach socket path does not include the run and machine names: %q", firstPath)
 	}
 	if firstPath == secondPath {
 		t.Fatal("separate debug sessions produced the same attach socket path")
@@ -387,8 +387,8 @@ func TestNewSocketIDIsUnique(t *testing.T) {
 	if first == second {
 		t.Fatal("separate runs received the same ID")
 	}
-	if len(first) != 32 || len(second) != 32 {
-		t.Fatalf("unexpected run ID lengths: %d and %d", len(first), len(second))
+	if len(first) != 16 || len(second) != 16 {
+		t.Fatalf("unexpected socket ID lengths: %d and %d", len(first), len(second))
 	}
 }
 
@@ -397,12 +397,12 @@ func TestAttachPathBoundsLongProjectAndMachineNames(t *testing.T) {
 	if err := os.MkdirAll(projectPath, 0700); err != nil {
 		t.Fatal(err)
 	}
-	runner := &Runner{project: &Project{Path: projectPath}}
-	firstPath, err := runner.attachPath()
+	runner := &Runner{runID: "test-run", project: &Project{Path: projectPath}}
+	firstPath, err := runner.attachPath(strings.Repeat("machine", 100) + "-one")
 	if err != nil {
 		t.Fatal(err)
 	}
-	secondPath, err := runner.attachPath()
+	secondPath, err := runner.attachPath(strings.Repeat("machine", 100) + "-two")
 	if err != nil {
 		t.Fatal(err)
 	}
