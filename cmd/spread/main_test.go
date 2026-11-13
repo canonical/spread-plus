@@ -28,8 +28,8 @@ func TestRunExecWithoutSocket(t *testing.T) {
 	if !strings.Contains(err.Error(), "cannot connect to debug socket") {
 		t.Fatalf("unexpected error %q", err)
 	}
-	if err := runStop([]string{socket}); err == nil || !strings.Contains(err.Error(), "cannot connect to debug socket") {
-		t.Fatalf("expected spread stop to report a missing debug socket, got %v", err)
+	if err := runContinue([]string{socket}); err == nil || !strings.Contains(err.Error(), "cannot connect to debug socket") {
+		t.Fatalf("expected spread continue to report a missing debug socket, got %v", err)
 	}
 }
 
@@ -43,12 +43,12 @@ func TestRunExecRequiresCommand(t *testing.T) {
 	}
 }
 
-func TestRunStopRequiresSocket(t *testing.T) {
-	err := runStop(nil)
+func TestRunContinueRequiresSocket(t *testing.T) {
+	err := runContinue(nil)
 	if err == nil {
 		t.Fatal("expected a usage error")
 	}
-	if got, want := err.Error(), "usage: spread stop SOCKET"; got != want {
+	if got, want := err.Error(), "usage: spread continue SOCKET"; got != want {
 		t.Fatalf("unexpected error %q, want %q", got, want)
 	}
 }

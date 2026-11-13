@@ -72,8 +72,8 @@ func run() error {
 	if len(os.Args) > 1 && os.Args[1] == "exec" {
 		return runExec(os.Args[2:])
 	}
-	if len(os.Args) > 1 && os.Args[1] == "stop" {
-		return runStop(os.Args[2:])
+	if len(os.Args) > 1 && os.Args[1] == "continue" {
+		return runContinue(os.Args[2:])
 	}
 
 	mrand.Seed(time.Now().UnixNano())
@@ -194,9 +194,9 @@ func runExec(args []string) error {
 	return nil
 }
 
-func runStop(args []string) error {
+func runContinue(args []string) error {
 	if len(args) != 1 {
-		return fmt.Errorf("usage: spread stop SOCKET")
+		return fmt.Errorf("usage: spread continue SOCKET")
 	}
 	return spread.StopDebugSocket(args[0])
 }

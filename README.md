@@ -568,14 +568,16 @@ For a headless debug pause, use `-debug-socket` on its own. After a task fails,
 Spread creates a socket named `.spread-<jobid>-<machine>.socket` without
 opening an interactive shell and prints its path and the commands to use it.
 Run `spread exec SOCKET -- COMMAND` from the project directory to execute a
-command in the failing task's directory, then run `spread stop SOCKET` to close
-that socket and continue the run. Each run and worker gets its own socket, so
+command in the failing task's directory, then run `spread continue SOCKET` to
+close that socket and continue the run. Each run and worker gets its own socket, so
 multiple debug sessions can be active at the same time:
 
 ```shell
 spread -debug-socket BACKEND:SYSTEM:TEST_PATH
+
+# In a different terminal, since `spread -debug-socket` runs until all tests have finished
 spread exec .spread-<jobid>-<machine>.socket -- 'journalctl -u snapd --no-pager -n 100'
-spread stop .spread-<jobid>-<machine>.socket
+spread continue .spread-<jobid>-<machine>.socket
 ```
 
 The command runs in the failing task's directory and environment, and its

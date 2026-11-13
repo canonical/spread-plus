@@ -141,19 +141,28 @@ func TestDebugSocketSessionsUseSeparateSockets(t *testing.T) {
 			t.Errorf("cannot remove temporary project directory: %v", err)
 		}
 	})
-	runner := &Runner{runID: "test-run", project: &Project{Path: projectPath}}
-	secondRun := &Runner{runID: "other-run", project: runner.project}
-	firstPath := runner.attachPath("machine one")
-	secondPath := runner.attachPath("machine two")
-	thirdPath := secondRun.attachPath("machine one")
-	if firstPath == secondPath || firstPath == thirdPath {
-		t.Fatal("different machines or runs produced the same attach socket path")
+	runner := &Runner{project: &Project{Path: projectPath}}
+	secondRun := &Runner{project: runner.project}
+	firstPath, err := runner.attachPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondPath, err := runner.attachPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	thirdPath, err := secondRun.attachPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if firstPath == secondPath || firstPath == thirdPath || secondPath == thirdPath {
+		t.Fatal("separate debug sessions produced the same attach socket path")
 	}
 	done := make(chan struct{}, 3)
 
-	startSession := func(runner *Runner, machineName string) {
+	startSession := func(runner *Runner, machineName, path string) {
 		go func() {
-			runner.runDebugSocket(nil, machineName, "", NewEnvironment())
+			runner.runDebugSocketAtPath(path, nil, machineName, "", NewEnvironment())
 			done <- struct{}{}
 		}()
 	}
@@ -169,9 +178,9 @@ func TestDebugSocketSessionsUseSeparateSockets(t *testing.T) {
 		t.Fatalf("debug socket %q was not created", path)
 	}
 
-	startSession(runner, "machine one")
-	startSession(runner, "machine two")
-	startSession(secondRun, "machine one")
+	startSession(runner, "machine one", firstPath)
+	startSession(runner, "machine two", secondPath)
+	startSession(secondRun, "machine one", thirdPath)
 	waitForSocket(firstPath)
 	waitForSocket(secondPath)
 	waitForSocket(thirdPath)
@@ -343,14 +352,72 @@ func TestParseAgentCommandOutputWithoutTrailingNewline(t *testing.T) {
 	}
 }
 
-func TestAttachPathUsesRunIDAndSanitizedMachineName(t *testing.T) {
+func TestAttachPathUsesRandomIDWithoutMachineName(t *testing.T) {
 	projectPath := t.TempDir()
-	runner := &Runner{runID: "1234", project: &Project{Path: projectPath}}
-	if got, want := filepath.Base(runner.attachPath("machine one")), ".spread-1234-machine_one.socket"; got != want {
-		t.Fatalf("unexpected attach path %q, want %q", got, want)
+	runner := &Runner{project: &Project{Path: projectPath}}
+	firstPath, err := runner.attachPath()
+	if err != nil {
+		t.Fatal(err)
 	}
-	secondRun := &Runner{runID: "5678", project: runner.project}
-	if runner.attachPath("machine one") == secondRun.attachPath("machine one") {
-		t.Fatal("different run IDs produced the same attach socket path")
+	secondPath, err := runner.attachPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstName := filepath.Base(firstPath)
+	if !strings.HasPrefix(firstName, ".spread-") || !strings.HasSuffix(firstName, ".socket") {
+		t.Fatalf("unexpected attach socket path %q", firstPath)
+	}
+	if strings.Contains(firstName, "machine") {
+		t.Fatalf("attach socket path includes a machine name: %q", firstPath)
+	}
+	if firstPath == secondPath {
+		t.Fatal("separate debug sessions produced the same attach socket path")
+	}
+}
+
+func TestNewSocketIDIsUnique(t *testing.T) {
+	first, err := newSocketID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := newSocketID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first == second {
+		t.Fatal("separate runs received the same ID")
+	}
+	if len(first) != 32 || len(second) != 32 {
+		t.Fatalf("unexpected run ID lengths: %d and %d", len(first), len(second))
+	}
+}
+
+func TestAttachPathBoundsLongProjectAndMachineNames(t *testing.T) {
+	projectPath := filepath.Join(t.TempDir(), strings.Repeat("p", maxUnixSocketPathLen*2))
+	if err := os.MkdirAll(projectPath, 0700); err != nil {
+		t.Fatal(err)
+	}
+	runner := &Runner{project: &Project{Path: projectPath}}
+	firstPath, err := runner.attachPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondPath, err := runner.attachPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(firstPath) >= maxUnixSocketPathLen {
+		t.Fatalf("attach socket path is too long: %d bytes", len(firstPath))
+	}
+	if firstPath == secondPath {
+		t.Fatal("long machine labels produced the same attach socket path")
+	}
+
+	broker, err := StartDebugSocketBroker(firstPath, nil, "", NewEnvironment())
+	if err != nil {
+		t.Fatalf("cannot create bounded attach socket: %v", err)
+	}
+	if err := broker.Close(); err != nil {
+		t.Fatal(err)
 	}
 }
