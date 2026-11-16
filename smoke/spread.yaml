@@ -104,9 +104,9 @@ backends:
         kill-timeout: 40m
         halt-timeout: 2h
         systems:
-            - ubuntu-core-24-arm-64-rpi4:
-                  queue: rpi4b
-                  image: https://cdimage.ubuntu.com/ubuntu-core/24/dangerous-stable/current/ubuntu-core-24-arm64+raspi.img.xz
+            - ubuntu-core-22-arm-32-rpi3:
+                  queue: cert-rpi3bp
+                  image: https://cdimage.ubuntu.com/ubuntu-core/22/dangerous-stable/current/ubuntu-core-22-armhf+raspi.img.xz
                   workers: 1
                   username: ubuntu
                   password: ubuntu
