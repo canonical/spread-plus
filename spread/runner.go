@@ -3,6 +3,8 @@ package spread
 import (
 	"bytes"
 	"compress/gzip"
+	crand "crypto/rand"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -23,12 +25,18 @@ import (
 	"gopkg.in/tomb.v2"
 )
 
+const (
+	maxUnixSocketPathLen       = 100
+	maxDebugSocketMachineLabel = 15
+)
+
 type Options struct {
 	Password       string
 	Filter         Filter
 	Reuse          bool
 	ReusePid       int
 	Debug          bool
+	DebugSocket    bool
 	NoDebug        bool
 	Shell          bool
 	ShellBefore    bool
@@ -53,6 +61,7 @@ type Runner struct {
 	tomb tomb.Tomb
 	mu   sync.Mutex
 
+	runID     string
 	project   *Project
 	options   *Options
 	providers map[string]Provider
@@ -77,7 +86,12 @@ type Runner struct {
 }
 
 func Start(project *Project, options *Options) (*Runner, error) {
+	if options.DebugSocket && (options.Debug || options.Shell || options.ShellBefore || options.ShellAfter || options.Abend || options.Restore) {
+		return nil, fmt.Errorf("-debug-socket cannot be combined with other debug, shell, or restore modes")
+	}
+
 	r := &Runner{
+		runID:     fmt.Sprintf("%d", os.Getpid()),
 		project:   project,
 		options:   options,
 		providers: make(map[string]Provider),
@@ -143,6 +157,77 @@ func (r *Runner) reusePath() string {
 		return filepath.Join(r.project.Path, ".spread-reuse.yaml")
 	}
 	return filepath.Join(r.project.Path, fmt.Sprintf(".spread-reuse.%d.yaml", os.Getpid()))
+}
+
+func newSocketID() (string, error) {
+	var id [8]byte
+	if _, err := crand.Read(id[:]); err != nil {
+		return "", fmt.Errorf("cannot generate debug socket ID: %v", err)
+	}
+	return fmt.Sprintf("%x", id[:]), nil
+}
+
+// attachPath returns a unique socket path for debug commands.
+func (r *Runner) attachPath(machineName string) (string, error) {
+	socketID, err := newSocketID()
+	if err != nil {
+		return "", err
+	}
+	var safeName strings.Builder
+	for _, char := range machineName {
+		switch {
+		case char >= 'a' && char <= 'z',
+			char >= 'A' && char <= 'Z',
+			char >= '0' && char <= '9',
+			char == '-', char == '_', char == '.':
+			safeName.WriteRune(char)
+		default:
+			safeName.WriteByte('_')
+		}
+	}
+	name := strings.Trim(safeName.String(), ".")
+	if name == "" {
+		name = "machine"
+	}
+	if len(name) > maxDebugSocketMachineLabel {
+		hash := sha256.Sum256([]byte(machineName))
+		name = name[:6] + fmt.Sprintf("-%x", hash[:4])
+	}
+	filename := fmt.Sprintf(".spread-%s-%s-%s.socket", r.runID, name, socketID)
+	path := filepath.Join(r.project.Path, filename)
+	if workingDir, err := os.Getwd(); err == nil {
+		if relativePath, err := filepath.Rel(workingDir, path); err == nil {
+			if len(relativePath) < maxUnixSocketPathLen {
+				return relativePath, nil
+			}
+		}
+	}
+	if len(path) < maxUnixSocketPathLen {
+		return path, nil
+	}
+	return filename, nil
+}
+
+func (r *Runner) workerCounts() (map[*System]int, int) {
+	workers := make(map[*System]int)
+	for _, backend := range r.project.Backends {
+		for _, system := range backend.Systems {
+			for _, job := range r.pending {
+				if job.Backend == backend && job.System == system {
+					if system.Workers > workers[system] {
+						workers[system]++
+					} else {
+						break
+					}
+				}
+			}
+		}
+	}
+	total := 0
+	for _, count := range workers {
+		total += count
+	}
+	return workers, total
 }
 
 type projectContent struct {
@@ -211,21 +296,8 @@ func (r *Runner) loop() (err error) {
 	// Find out how many workers are needed for each backend system.
 	// Even if multiple workers per system are requested, must not
 	// have more workers than there are jobs.
-	workers := make(map[*System]int)
-	for _, backend := range r.project.Backends {
-		for _, system := range backend.Systems {
-			for _, job := range r.pending {
-				if job.Backend == backend && job.System == system {
-					if system.Workers > workers[system] {
-						workers[system]++
-						r.alive++
-					} else {
-						break
-					}
-				}
-			}
-		}
-	}
+	workers, alive := r.workerCounts()
+	r.alive = alive
 
 	// It is allowed showing the output when 1 worker is used at all
 	if r.options.Live {
@@ -516,10 +588,7 @@ func (r *Runner) run(client *Client, job *Job, verb string, context interface{},
 	}
 	if (r.options.Shell || r.options.ShellBefore) && verb == executing {
 		printf("Starting shell instead of %s %s...", verb, job)
-		err := client.Shell("", dir, r.shellEnv(job, job.Environment))
-		if err != nil {
-			printf("Error running debug shell: %v", err)
-		}
+		r.runInteractiveShell(client, dir, r.shellEnv(job, job.Environment))
 		printf("Continuing...")
 		if r.options.Shell {
 			return true
@@ -573,12 +642,13 @@ func (r *Runner) run(client *Client, job *Job, verb string, context interface{},
 				}
 			}
 		}
-		if r.options.Debug || r.options.ShellAfter {
+		if r.options.DebugSocket {
+			printf("Starting debug socket session...")
+			r.runDebugSocket(client, client.Server().Label(), dir, r.shellEnv(job, job.Environment))
+			printf("Continuing...")
+		} else if r.options.Debug || r.options.ShellAfter {
 			printf("Starting shell to debug...")
-			err = client.Shell("", dir, r.shellEnv(job, job.Environment))
-			if err != nil {
-				printf("Error running debug shell: %v", err)
-			}
+			r.runInteractiveShell(client, dir, r.shellEnv(job, job.Environment))
 			printf("Continuing...")
 		}
 		*abend = r.options.Abend
@@ -586,10 +656,7 @@ func (r *Runner) run(client *Client, job *Job, verb string, context interface{},
 	}
 	if r.options.ShellAfter && verb == executing {
 		printf("Starting shell after %s %s...", verb, job)
-		err := client.Shell("", dir, r.shellEnv(job, job.Environment))
-		if err != nil {
-			printf("Error running debug shell: %v", err)
-		}
+		r.runInteractiveShell(client, dir, r.shellEnv(job, job.Environment))
 		printf("Continuing...")
 	}
 	// Print or save performance output
@@ -604,6 +671,42 @@ func (r *Runner) run(client *Client, job *Job, verb string, context interface{},
 	}
 
 	return true
+}
+
+func (r *Runner) runDebugSocket(client *Client, machineName, dir string, env *Environment) {
+	path, err := r.attachPath(machineName)
+	if err != nil {
+		printf("Cannot create debug socket path: %v", err)
+		return
+	}
+	r.runDebugSocketAtPath(path, client, machineName, dir, env)
+}
+
+func (r *Runner) runDebugSocketAtPath(path string, client *Client, machineName, dir string, env *Environment) {
+	broker, err := StartDebugSocketBroker(path, client, dir, env)
+	if err != nil {
+		printf("Cannot create debug socket: %v", err)
+		return
+	}
+	defer func() {
+		if err := broker.Close(); err != nil {
+			printf("Error closing debug socket: %v", err)
+		}
+	}()
+
+	printf("Debug socket session for %q ready at %q. Use `spread exec <socket> -- <command>` to run commands, then `spread continue <socket>` to continue.",
+		machineName, broker.Path())
+	select {
+	case <-broker.StopRequested():
+	case <-r.tomb.Dying():
+	}
+}
+
+// runInteractiveShell opens an interactive shell on the worker.
+func (r *Runner) runInteractiveShell(client *Client, dir string, env *Environment) {
+	if err := client.Shell("", dir, env); err != nil {
+		printf("Error running debug shell: %v", err)
+	}
 }
 
 func (r *Runner) shellEnv(job *Job, env *Environment) *Environment {

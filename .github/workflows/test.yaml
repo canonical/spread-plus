@@ -138,7 +138,6 @@ jobs:
           OS_USER_DOMAIN_NAME: ${{ vars.OS_USER_DOMAIN_NAME }}
           OS_USERNAME: ${{ secrets.OS_USERNAME }}
           OS_SKIP: ${{ vars.SKIP_OPENSTACK_AMD64_PS7 }}
-          SPREAD_PARAMS: ${{ vars.SPREAD_PARAMS }}
       run: |
           if [ "$OS_SKIP" == true ]; then
               echo "Skipping openstack smoke tests..."
@@ -146,11 +145,14 @@ jobs:
           fi
           cd "${{ github.workspace }}"/smoke
           chmod +x "${{ github.workspace }}"/bin/spread-plus
-          # "pipefail" ensures that a non-zero status from the spread is propagated
+          # Run only the reboot smoke test before the separate attach smoke test.
           (
             set -o pipefail
-            "${{ github.workspace }}/bin/spread-plus" "$SPREAD_PARAMS" openstack:tests/ | tee spread.log
+            "${{ github.workspace }}/bin/spread-plus" openstack:ubuntu-22.04-64:tests/reboot | tee spread-reboot.log
           )
+          ./lib/run-smoke.sh \
+            "${{ github.workspace }}/bin/spread-plus" \
+            openstack:ubuntu-22.04-64:tests/attach
 
     - name: Discard spread workers
       if: always()
@@ -193,7 +195,6 @@ jobs:
           OS_USER_DOMAIN_NAME: ${{ vars.OS_USER_DOMAIN_NAME }}
           OS_USERNAME: ${{ secrets.OS_USERNAME }}
           OS_SKIP: ${{ vars.SKIP_OPENSTACK_ARM64_PS7 }}
-          SPREAD_PARAMS: ${{ vars.SPREAD_PARAMS }}
       run: |
           if [ "$OS_SKIP" == true ]; then
               echo "Skipping openstack smoke tests..."
@@ -204,7 +205,7 @@ jobs:
           # "pipefail" ensures that a non-zero status from the spread is propagated
           (
             set -o pipefail    
-            "${{ github.workspace }}/bin/spread-plus" "$SPREAD_PARAMS" openstack-arm:tests/ | tee spread.log
+            "${{ github.workspace }}/bin/spread-plus" openstack-arm:tests/ | tee spread.log
           )
 
     - name: Discard spread workers
@@ -238,7 +239,6 @@ jobs:
 
     - name: Smoke tests with testflinger backend
       env: 
-          SPREAD_PARAMS: ${{ vars.SPREAD_PARAMS }}
           TESTFLINGER_CLIENT_ID: ${{ secrets.TESTFLINGER_CLIENT_ID }}
           TESTFLINGER_SECRET_KEY: ${{ secrets.TESTFLINGER_SECRET_KEY }}
       run: |
@@ -247,7 +247,7 @@ jobs:
           # "pipefail" ensures that a non-zero status from the spread is propagated
           (
             set -o pipefail    
-            "${{ github.workspace }}/bin/spread-plus" "$SPREAD_PARAMS" testflinger:tests/ | tee spread.log
+            "${{ github.workspace }}/bin/spread-plus" testflinger:tests/ | tee spread.log
           )
   
     - name: Discard spread workers
