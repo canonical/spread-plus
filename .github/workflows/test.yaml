@@ -279,7 +279,7 @@ jobs:
           GCLOUD_SA_KEY: ${{ secrets.GCLOUD_SA_KEY }}
           SPREAD_FILE: spread-plus-${{ matrix.arch }}
       run: |
-          sudo snap install google-cloud-sdk --classic
+          sudo snap install google-cloud-cli --classic
           echo "$GCLOUD_SA_KEY" > sa.json
           gcloud auth activate-service-account --key-file=sa.json
           rm -f sa.json
