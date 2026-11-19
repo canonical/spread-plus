@@ -1,0 +1,32 @@
+summary: Test the execution counter with -repeat.
+
+prepare: |
+    if [ ! -f .spread-reuse.yaml ]; then
+        touch /run/spread-reuse.yaml
+        ln -s /run/spread-reuse.yaml .spread-reuse.yaml
+    fi
+
+restore: |
+    rm -f exec1.out exec2.out exec3.out
+
+execute: |
+    # No repeat: the total is the number of jobs
+    spread -reuse -resend lxd:ubuntu-22.04:checks/task-a &> exec1.out
+    MATCH 'task-a.*\(1/1\)' < exec1.out
+
+    # One job repeated twice runs 3 times
+    spread -reuse -resend -repeat 2 lxd:ubuntu-22.04:checks/task-a &> exec2.out
+    MATCH 'task-a.*\(1/3\)' < exec2.out
+    MATCH 'task-a.*\(2/3\)' < exec2.out
+    MATCH 'task-a.*\(3/3\)' < exec2.out
+    NOMATCH '\([0-9]+/1\)' < exec2.out
+
+    # Two jobs repeated once run 4 times in total
+    spread -reuse -resend -repeat 1 lxd:ubuntu-22.04:checks/task-a lxd:ubuntu-22.04:checks/task-b &> exec3.out
+    MATCH '\(4/4\)' < exec3.out
+    [ "$(grep -c 'Executing.*/4)' exec3.out)" -eq 4 ]
+
+debug: |
+    cat exec1.out || true
+    cat exec2.out || true
+    cat exec3.out || true

@@ -584,7 +584,7 @@ func (r *Runner) run(client *Client, job *Job, verb string, context interface{},
 		r.sequence[job] = r.last + 1
 		r.last = r.last + 1
 
-		printft(start, startTime, "%s %s (%s) (%d/%d)...", cases.Title(language.Und).String(verb), contextStr, server.Label(), r.sequence[job], len(r.pending))
+		printft(start, startTime, "%s %s (%s) (%d/%d)...", cases.Title(language.Und).String(verb), contextStr, server.Label(), r.sequence[job], len(r.pending)*(r.options.Repeat+1))
 		r.mu.Unlock()
 	} else {
 		printft(start, startTime, "%s %s (%s)...", cases.Title(language.Und).String(verb), contextStr, server.Label())
