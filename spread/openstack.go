@@ -575,6 +575,9 @@ func (p *openstackProvider) waitProvision(ctx context.Context, s *openstackServe
 var openstackServerBootTimeout = 5 * time.Minute
 var openstackServerBootRetry = 5 * time.Second
 var openstackDirectSSHProbeTimeout = 3 * time.Second
+var openstackDirectSSHReadyTimeout = 15 * time.Second
+var openstackDirectSSHRetry = time.Second
+var probeDirectSSH = canReachDirectSSH
 
 func canReachDirectSSH(ctx context.Context, address string, timeout time.Duration) bool {
 	if net.ParseIP(address) == nil {
@@ -598,6 +601,26 @@ func canReachDirectSSH(ctx context.Context, address string, timeout time.Duratio
 	return true
 }
 
+func waitReachableDirectSSH(ctx context.Context, address string, timeout, retry time.Duration) (bool, error) {
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
+	for {
+		if probeDirectSSH(ctx, address, openstackDirectSSHProbeTimeout) {
+			return true, nil
+		}
+
+		debugf("Direct SSH to %s is not ready; retrying", address)
+		select {
+		case <-ctx.Done():
+			return false, ctx.Err()
+		case <-timer.C:
+			return false, nil
+		case <-time.After(retry):
+		}
+	}
+}
+
 func countIPsBetween(initialIp net.IP, finalIp net.IP) (uint32, error) {
 	ip1Int := binary.BigEndian.Uint32(initialIp.To4())
 	ip2Int := binary.BigEndian.Uint32(finalIp.To4())
@@ -617,10 +640,15 @@ func (p *openstackProvider) updateAddressIfProxyDefined(ctx context.Context, s *
 		return nil
 	}
 
-	if canReachDirectSSH(ctx, s.address, openstackDirectSSHProbeTimeout) {
+	direct, err := waitReachableDirectSSH(ctx, s.address, openstackDirectSSHReadyTimeout, openstackDirectSSHRetry)
+	if err != nil {
+		return fmt.Errorf("cannot probe direct SSH to %s: %v", s.address, err)
+	}
+	if direct {
 		printf("Server reachable directly via SSH, skipping proxy mapping (%s)", s.d.Name)
 		return nil
 	}
+	printf("Direct SSH to %s was not reachable after %s; using proxy mapping", s.address, openstackDirectSSHReadyTimeout)
 
 	for _, rel := range s.p.backend.CIDRPortRel {
 		parts := strings.SplitN(rel, ":", 2)
@@ -655,7 +683,7 @@ func (p *openstackProvider) updateAddressIfProxyDefined(ctx context.Context, s *
 			}
 			finalPort := strconv.Itoa(initialPort + int(diffBetweenIps))
 			s.address = s.p.backend.Proxy + ":" + finalPort
-			printf("Server connected through proxy %s", s.address)
+			printf("Using proxy address %s", s.address)
 		}
 	}
 	return nil
