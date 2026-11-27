@@ -251,6 +251,8 @@ func (r *Runner) closeOnStop(client *Client) {
 	}()
 }
 
+// Stop requests runner shutdown, cancels content preparation, and waits for
+// the runner's work to finish.
 func (r *Runner) Stop() error {
 	r.mu.Lock()
 	r.stopRequested = true
