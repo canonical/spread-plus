@@ -325,6 +325,23 @@ func (p *TestFlingerProvider) requestDevice(ctx context.Context, system *System)
 	return s, nil
 }
 
+func (p *TestFlingerProvider) getJobResult(jobID string, result *TestFlingerResultResponse) error {
+	const maxAttempts = 3
+
+	var err error
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		err = p.do("GET", "/result/"+jobID, nil, result)
+		if err == nil {
+			return nil
+		}
+		if attempt < maxAttempts-1 {
+			time.Sleep(time.Duration(attempt+1) * time.Second)
+		}
+	}
+
+	return fmt.Errorf("cannot get job result after %d attempts: %v", maxAttempts, err)
+}
+
 func (p *TestFlingerProvider) waitDeviceBoot(ctx context.Context, s *TestFlingerJob) error {
 	printf("Waiting for TestFlinger %s to have an address...", s.d.Name)
 	wait_timeout := s.system.WaitTimeout.Duration
@@ -339,7 +356,7 @@ func (p *TestFlingerProvider) waitDeviceBoot(ctx context.Context, s *TestFlinger
 
 	for {
 		var resRes TestFlingerResultResponse
-		err := p.do("GET", "/result/"+s.d.JobId, nil, &resRes)
+		err := p.getJobResult(s.d.JobId, &resRes)
 
 		if err != nil {
 			return fmt.Errorf("error requesting job status: %v", err)
@@ -398,9 +415,9 @@ func (p *TestFlingerProvider) getIpForReservedDevice(s *TestFlingerJob) (string,
 
 	for {
 		var result TestFlingerResultResponse
-		err := p.do("GET", "/result/"+s.d.JobId, nil, &result)
+		err := p.getJobResult(s.d.JobId, &result)
 		if err != nil {
-			return "", fmt.Errorf("error requesting job result: %v", err)
+			return "", err
 		}
 		if result.DeviceInfo.DeviceIP != "" {
 			return result.DeviceInfo.DeviceIP, nil
