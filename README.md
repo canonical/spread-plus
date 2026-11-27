@@ -527,13 +527,13 @@ altogether.
 ## Signal handling
 
 Pressing Ctrl+C sends `SIGINT` to Spread. Spread starts runner cleanup and
-waits for it to finish; there is no timeout for this cleanup, and pressing
-Ctrl+C again does not force Spread to exit.
+waits for it to finish; there is no timeout for this cleanup. Pressing Ctrl+C
+again forces Spread to exit immediately.
 
 Sending `SIGTERM` causes Spread to exit immediately without waiting for runner
-cleanup. This also applies if `SIGTERM` arrives while cleanup after `SIGINT` is
-in progress. `SIGQUIT` is not handled by Spread and follows the operating
-system's default behavior. `SIGKILL` cannot be caught or handled.
+cleanup, whether it arrives first or while cleanup after `SIGINT` is in
+progress. `SIGQUIT` is not handled by Spread and follows the operating system's
+default behavior. `SIGKILL` cannot be caught or handled.
 
 
 <a name="reuse"/>

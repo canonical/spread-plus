@@ -179,11 +179,15 @@ func run() error {
 			printf("Terminated, exiting immediately.")
 			os.Exit(signalExitCode(sig))
 		case <-interrupts:
-			printf("Interrupted, cleaning up...")
+			printf("Interrupted, cleaning up (press Ctrl+C again to exit immediately)...")
 		}
-		exitCode := stopOnSignal(os.Interrupt, terminations, runner.Stop)
+		exitCode := stopOnSignal(os.Interrupt, interrupts, terminations, runner.Stop)
 		if exitCode != 0 {
-			printf("SIGTERM received during cleanup; exiting immediately.")
+			if exitCode == 130 {
+				printf("Interrupted again; exiting immediately.")
+			} else {
+				printf("SIGTERM received during cleanup; exiting immediately.")
+			}
 			os.Exit(exitCode)
 		}
 	}()
@@ -191,7 +195,7 @@ func run() error {
 	return runner.Wait()
 }
 
-func stopOnSignal(first os.Signal, terminations <-chan os.Signal, stop func() error) int {
+func stopOnSignal(first os.Signal, interrupts, terminations <-chan os.Signal, stop func() error) int {
 	if first == syscall.SIGTERM {
 		return signalExitCode(first)
 	}
@@ -205,6 +209,8 @@ func stopOnSignal(first os.Signal, terminations <-chan os.Signal, stop func() er
 	select {
 	case <-stopped:
 		return 0
+	case sig := <-interrupts:
+		return signalExitCode(sig)
 	case sig := <-terminations:
 		return signalExitCode(sig)
 	}

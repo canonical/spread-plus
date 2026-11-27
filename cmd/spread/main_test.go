@@ -58,7 +58,7 @@ func TestRunContinueRequiresSocket(t *testing.T) {
 func TestStopOnSignal(t *testing.T) {
 	t.Run("initial SIGTERM exits without cleanup", func(t *testing.T) {
 		cleanupStarted := false
-		exitCode := stopOnSignal(syscall.SIGTERM, nil, func() error {
+		exitCode := stopOnSignal(syscall.SIGTERM, nil, nil, func() error {
 			cleanupStarted = true
 			return nil
 		})
@@ -71,40 +71,56 @@ func TestStopOnSignal(t *testing.T) {
 	})
 
 	t.Run("completed stop", func(t *testing.T) {
-		exitCode := stopOnSignal(os.Interrupt, nil, func() error { return nil })
+		exitCode := stopOnSignal(os.Interrupt, nil, nil, func() error { return nil })
 		if exitCode != 0 {
 			t.Fatalf("unexpected exit code: %d", exitCode)
 		}
 	})
 
-	t.Run("SIGTERM forces exit during cleanup", func(t *testing.T) {
-		terminations := make(chan os.Signal, 1)
-		stopStarted := make(chan struct{})
-		releaseStop := make(chan struct{})
-		defer func() {
-			select {
-			case <-releaseStop:
-			default:
-				close(releaseStop)
-			}
-		}()
-		done := make(chan int, 1)
-		go func() {
-			done <- stopOnSignal(os.Interrupt, terminations, func() error {
-				close(stopStarted)
-				<-releaseStop
-				return nil
-			})
-		}()
+	for _, test := range []struct {
+		name     string
+		signal   os.Signal
+		wantCode int
+	}{
+		{name: "repeated SIGINT forces exit during cleanup", signal: os.Interrupt, wantCode: 130},
+		{name: "SIGTERM forces exit during cleanup", signal: syscall.SIGTERM, wantCode: 128 + int(syscall.SIGTERM)},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			interrupts := make(chan os.Signal, 1)
+			terminations := make(chan os.Signal, 1)
+			stopStarted := make(chan struct{})
+			releaseStop := make(chan struct{})
+			defer func() {
+				select {
+				case <-releaseStop:
+				default:
+					close(releaseStop)
+				}
+			}()
+			done := make(chan int, 1)
+			go func() {
+				done <- stopOnSignal(os.Interrupt, interrupts, terminations, func() error {
+					close(stopStarted)
+					<-releaseStop
+					return nil
+				})
+			}()
 
-		<-stopStarted
-		terminations <- syscall.SIGTERM
-		if exitCode := <-done; exitCode != 128+int(syscall.SIGTERM) {
-			t.Fatalf("unexpected exit code: %d", exitCode)
-		}
-	})
+			<-stopStarted
+			if test.signal == syscall.SIGTERM {
+				terminations <- test.signal
+			} else {
+				interrupts <- test.signal
+			}
+			if exitCode := <-done; exitCode != test.wantCode {
+				t.Fatalf("unexpected exit code: %d", exitCode)
+			}
+		})
+	}
 
 	t.Run("SIGINT waits until cleanup completes", func(t *testing.T) {
+		interrupts := make(chan os.Signal, 1)
+		terminations := make(chan os.Signal, 1)
 		releaseStop := make(chan struct{})
 		release := func() {
 			select {
@@ -117,7 +133,7 @@ func TestStopOnSignal(t *testing.T) {
 		stopStarted := make(chan struct{})
 		done := make(chan int, 1)
 		go func() {
-			done <- stopOnSignal(os.Interrupt, nil, func() error {
+			done <- stopOnSignal(os.Interrupt, interrupts, terminations, func() error {
 				close(stopStarted)
 				<-releaseStop
 				return nil
