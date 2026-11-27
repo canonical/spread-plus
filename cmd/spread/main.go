@@ -48,8 +48,6 @@ var (
 	order          = flag.Bool("order", false, "Follow the tasks order passed as parameter")
 )
 
-const interruptShutdownTimeout = 5 * time.Second
-
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -169,20 +167,23 @@ func run() error {
 		return err
 	}
 
-	// Buffer the initial shutdown signal and a follow-up escalation.
-	sigch := make(chan os.Signal, 2)
-	signal.Notify(sigch, os.Interrupt, syscall.SIGTERM)
-	defer signal.Stop(sigch)
+	interrupts := make(chan os.Signal, 1)
+	terminations := make(chan os.Signal, 1)
+	signal.Notify(interrupts, os.Interrupt)
+	signal.Notify(terminations, syscall.SIGTERM)
+	defer signal.Stop(interrupts)
+	defer signal.Stop(terminations)
 	go func() {
-		first := <-sigch
-		if first == syscall.SIGTERM {
-			printf("Terminated, cleaning up (send another termination signal to exit immediately)...")
-		} else {
-			printf("Interrupted, cleaning up (press Ctrl+C again to exit immediately)...")
+		select {
+		case sig := <-terminations:
+			printf("Terminated, exiting immediately.")
+			os.Exit(signalExitCode(sig))
+		case <-interrupts:
+			printf("Interrupted, cleaning up...")
 		}
-		exitCode := stopOnSignal(first, sigch, runner.Stop, interruptShutdownTimeout)
+		exitCode := stopOnSignal(os.Interrupt, terminations, runner.Stop)
 		if exitCode != 0 {
-			printf("Cleanup did not finish within %s or was interrupted again; exiting immediately.", interruptShutdownTimeout)
+			printf("SIGTERM received during cleanup; exiting immediately.")
 			os.Exit(exitCode)
 		}
 	}()
@@ -190,22 +191,22 @@ func run() error {
 	return runner.Wait()
 }
 
-func stopOnSignal(first os.Signal, signals <-chan os.Signal, stop func() error, timeout time.Duration) int {
+func stopOnSignal(first os.Signal, terminations <-chan os.Signal, stop func() error) int {
+	if first == syscall.SIGTERM {
+		return signalExitCode(first)
+	}
+
 	stopped := make(chan struct{})
 	go func() {
 		stop()
 		close(stopped)
 	}()
 
-	timer := time.NewTimer(timeout)
-	defer timer.Stop()
 	select {
 	case <-stopped:
 		return 0
-	case sig := <-signals:
+	case sig := <-terminations:
 		return signalExitCode(sig)
-	case <-timer.C:
-		return signalExitCode(first)
 	}
 }
 
