@@ -31,7 +31,7 @@ execute: |
         echo "Waiting for nested Spread to execute its long-running task"
         started=false
         for ((i = 0; i < 120; i++)); do
-            if grep -Eq 'Executing lxd:[^[:space:]]*:checks/main' "$transcript"; then
+            if [[ -f "$transcript" ]] && grep -Eq 'Executing lxd:[^[:space:]]*:checks/main' "$transcript"; then
                 started=true
                 break
             fi
@@ -68,12 +68,21 @@ execute: |
             status=$?
         fi
         spread_pid=""
-        # A handled signal produces Spread's normal unsuccessful-run status;
-        # 130 or 143 would indicate that the graceful shutdown deadline expired.
-        if ((status != 1)); then
-            echo "expected nested Spread to finish cleanup with status 1 after SIG$signal; got $status" >&2
+        # SIGINT completes cleanup and returns the unsuccessful-run status;
+        # SIGTERM exits immediately with its conventional signal status.
+        expected_status=1
+        if [[ "$signal" == TERM ]]; then
+            expected_status=143
+            if ! grep -Fq "Terminated, exiting immediately." "$transcript"; then
+                echo "nested Spread did not report immediate SIGTERM handling" >&2
+                cat "$transcript" >&2
+                exit 1
+            fi
+        fi
+        if ((status != expected_status)); then
+            echo "expected nested Spread to exit with status $expected_status after SIG$signal; got $status" >&2
             cat "$transcript" >&2
             exit 1
         fi
-        echo "Nested Spread handled SIG$signal and completed cleanup"
+        echo "Nested Spread handled SIG$signal and exited with status $status"
     done
