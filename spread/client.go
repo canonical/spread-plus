@@ -1037,6 +1037,7 @@ func (s *localScript) run() (stdout, stderr []byte, err error) {
 
 	var outbuf, errbuf safeBuffer
 	cmd := exec.Command("/bin/bash", "-eu", "-")
+	// Isolate the script so stop handling can kill it and its child processes together.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Stdin = &buf
 	cmd.Dir = s.dir
