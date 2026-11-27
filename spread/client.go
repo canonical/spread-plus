@@ -1115,7 +1115,6 @@ Loop:
 			<-done
 			err = fmt.Errorf("kill-timeout reached")
 			break Loop
-			err = fmt.Errorf("kill-timeout reached")
 		case <-warn.C:
 			var output, errput []byte
 			output, lastOut = outbuf.Since(lastOut)

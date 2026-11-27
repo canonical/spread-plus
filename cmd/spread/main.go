@@ -174,14 +174,13 @@ func run() error {
 	defer signal.Stop(interrupts)
 	defer signal.Stop(terminations)
 	go func() {
-		select {
-		case sig := <-terminations:
+		sig, terminated := waitForInitialSignal(interrupts, terminations)
+		if terminated {
 			printf("Terminated, exiting immediately.")
 			os.Exit(signalExitCode(sig))
-		case <-interrupts:
-			printf("Interrupted, cleaning up (press Ctrl+C again to exit immediately)...")
 		}
-		exitCode := stopOnSignal(os.Interrupt, interrupts, terminations, runner.Stop)
+		printf("Interrupted, cleaning up (press Ctrl+C again to exit immediately)...")
+		exitCode := stopOnSignal(interrupts, terminations, runner.Stop)
 		if exitCode != 0 {
 			if exitCode == 130 {
 				printf("Interrupted again; exiting immediately.")
@@ -195,11 +194,16 @@ func run() error {
 	return runner.Wait()
 }
 
-func stopOnSignal(first os.Signal, interrupts, terminations <-chan os.Signal, stop func() error) int {
-	if first == syscall.SIGTERM {
-		return signalExitCode(first)
+func waitForInitialSignal(interrupts, terminations <-chan os.Signal) (os.Signal, bool) {
+	select {
+	case sig := <-terminations:
+		return sig, true
+	case sig := <-interrupts:
+		return sig, false
 	}
+}
 
+func stopOnSignal(interrupts, terminations <-chan os.Signal, stop func() error) int {
 	stopped := make(chan struct{})
 	go func() {
 		stop()
