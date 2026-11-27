@@ -29,6 +29,7 @@ The primary goal of Spread Plus is to make the testing and validation workflow m
 [Skipping](#skipping)  
 [Rebooting](#rebooting)  
 [Timeouts](#timeouts)  
+[Signal handling](#signal-handling)  
 [Fast iterations with reuse](#reuse)  
 [Debugging](#debugging)  
 [Repeating tasks](#repeating)  
@@ -520,6 +521,19 @@ These timings may be tweaked at the project, backend, suite, and task level,
 by defining the `warn-timeout` and `kill-timeout` fields with a value such as
 `30s`, `1m30s`, `10m`, or `1.5h`. A value of `-1` means disable the timeout
 altogether.
+
+<a name="signal-handling"/>
+
+## Signal handling
+
+Pressing Ctrl+C sends `SIGINT` to Spread. Spread starts runner cleanup and
+waits for it to finish; there is no timeout for this cleanup. Pressing Ctrl+C
+again forces Spread to exit immediately.
+
+Sending `SIGTERM` causes Spread to exit immediately without waiting for runner
+cleanup, whether it arrives first or while cleanup after `SIGINT` is in
+progress. `SIGQUIT` is not handled by Spread and follows the operating system's
+default behavior. `SIGKILL` cannot be caught or handled.
 
 
 <a name="reuse"/>

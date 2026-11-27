@@ -1,0 +1,4 @@
+summary: Keep running until Spread receives a shutdown signal.
+
+execute: |
+    exec sleep 300

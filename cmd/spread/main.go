@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/canonical/spread-plus/spread"
@@ -166,18 +167,64 @@ func run() error {
 		return err
 	}
 
-	sigch := make(chan os.Signal, 1)
-	signal.Notify(sigch, os.Interrupt)
+	interrupts := make(chan os.Signal, 1)
+	terminations := make(chan os.Signal, 1)
+	signal.Notify(interrupts, os.Interrupt)
+	signal.Notify(terminations, syscall.SIGTERM)
+	defer signal.Stop(interrupts)
+	defer signal.Stop(terminations)
 	go func() {
-		<-sigch
+		sig, terminated := waitForInitialSignal(interrupts, terminations)
+		if terminated {
+			printf("Terminated, exiting immediately.")
+			os.Exit(signalExitCode(sig))
+		}
 		printf("Interrupted, cleaning up (press Ctrl+C again to exit immediately)...")
-		go runner.Stop()
-		<-sigch
-		printf("Interrupted again, exiting immediately.")
-		os.Exit(130)
+		exitCode := stopOnSignal(interrupts, terminations, runner.Stop)
+		if exitCode != 0 {
+			if exitCode == 130 {
+				printf("Interrupted again; exiting immediately.")
+			} else {
+				printf("SIGTERM received during cleanup; exiting immediately.")
+			}
+			os.Exit(exitCode)
+		}
 	}()
 
 	return runner.Wait()
+}
+
+func waitForInitialSignal(interrupts, terminations <-chan os.Signal) (os.Signal, bool) {
+	select {
+	case sig := <-terminations:
+		return sig, true
+	case sig := <-interrupts:
+		return sig, false
+	}
+}
+
+func stopOnSignal(interrupts, terminations <-chan os.Signal, stop func() error) int {
+	stopped := make(chan struct{})
+	go func() {
+		stop()
+		close(stopped)
+	}()
+
+	select {
+	case <-stopped:
+		return 0
+	case sig := <-interrupts:
+		return signalExitCode(sig)
+	case sig := <-terminations:
+		return signalExitCode(sig)
+	}
+}
+
+func signalExitCode(sig os.Signal) int {
+	if sig == syscall.SIGTERM {
+		return 128 + int(syscall.SIGTERM)
+	}
+	return 130
 }
 
 // runExec sends a command to the socket created by a paused Spread shell.

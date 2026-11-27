@@ -3,7 +3,9 @@ package main
 import (
 	"os"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 )
 
 func TestRunExecWithoutSocket(t *testing.T) {
@@ -51,4 +53,93 @@ func TestRunContinueRequiresSocket(t *testing.T) {
 	if got, want := err.Error(), "usage: spread continue SOCKET"; got != want {
 		t.Fatalf("unexpected error %q, want %q", got, want)
 	}
+}
+
+func TestStopOnSignal(t *testing.T) {
+	t.Run("initial SIGTERM exits immediately", func(t *testing.T) {
+		interrupts := make(chan os.Signal, 1)
+		terminations := make(chan os.Signal, 1)
+		terminations <- syscall.SIGTERM
+
+		sig, terminated := waitForInitialSignal(interrupts, terminations)
+		if !terminated || sig != syscall.SIGTERM {
+			t.Fatalf("unexpected initial signal: %v, terminated=%t", sig, terminated)
+		}
+	})
+
+	for _, test := range []struct {
+		name     string
+		signal   os.Signal
+		wantCode int
+	}{
+		{name: "repeated SIGINT forces exit during cleanup", signal: os.Interrupt, wantCode: 130},
+		{name: "SIGTERM forces exit during cleanup", signal: syscall.SIGTERM, wantCode: 128 + int(syscall.SIGTERM)},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			interrupts := make(chan os.Signal, 1)
+			terminations := make(chan os.Signal, 1)
+			stopStarted := make(chan struct{})
+			releaseStop := make(chan struct{})
+			defer func() {
+				select {
+				case <-releaseStop:
+				default:
+					close(releaseStop)
+				}
+			}()
+			done := make(chan int, 1)
+			go func() {
+				done <- stopOnSignal(interrupts, terminations, func() error {
+					close(stopStarted)
+					<-releaseStop
+					return nil
+				})
+			}()
+
+			<-stopStarted
+			if test.signal == syscall.SIGTERM {
+				terminations <- test.signal
+			} else {
+				interrupts <- test.signal
+			}
+			if exitCode := <-done; exitCode != test.wantCode {
+				t.Fatalf("unexpected exit code: %d", exitCode)
+			}
+		})
+	}
+
+	t.Run("SIGINT waits until cleanup completes", func(t *testing.T) {
+		interrupts := make(chan os.Signal, 1)
+		terminations := make(chan os.Signal, 1)
+		releaseStop := make(chan struct{})
+		release := func() {
+			select {
+			case <-releaseStop:
+			default:
+				close(releaseStop)
+			}
+		}
+		defer release()
+		stopStarted := make(chan struct{})
+		done := make(chan int, 1)
+		go func() {
+			done <- stopOnSignal(interrupts, terminations, func() error {
+				close(stopStarted)
+				<-releaseStop
+				return nil
+			})
+		}()
+
+		<-stopStarted
+		select {
+		case exitCode := <-done:
+			t.Fatalf("stop returned before cleanup completed: %d", exitCode)
+		case <-time.After(20 * time.Millisecond):
+		}
+
+		release()
+		if exitCode := <-done; exitCode != 0 {
+			t.Fatalf("unexpected exit code: %d", exitCode)
+		}
+	})
 }

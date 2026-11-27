@@ -1,0 +1,12 @@
+project: spread
+
+backends:
+    lxd:
+        systems:
+            - ubuntu-22.04
+
+path: /home/test
+
+suites:
+    checks/:
+        summary: Verification tasks for signal handling.
