@@ -62,6 +62,8 @@ type Runner struct {
 	tomb tomb.Tomb
 	mu   sync.Mutex
 
+	stopRequested bool
+
 	runID     string
 	project   *Project
 	options   *Options
@@ -250,8 +252,18 @@ func (r *Runner) closeOnStop(client *Client) {
 }
 
 func (r *Runner) Stop() error {
+	r.mu.Lock()
+	r.stopRequested = true
+	r.mu.Unlock()
+	r.contentTomb.Kill(nil)
 	r.tomb.Kill(nil)
 	return r.tomb.Wait()
+}
+
+func (r *Runner) isStopping() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.stopRequested
 }
 
 func (r *Runner) loop() (err error) {
@@ -296,11 +308,17 @@ func (r *Runner) loop() (err error) {
 	}()
 
 	r.contentTomb.Go(r.prepareContent)
+	if !r.tomb.Alive() {
+		return nil
+	}
 
 	// Make it sequential for now.
 	_, err = r.waitContent()
 	if err != nil {
 		return err
+	}
+	if !r.tomb.Alive() {
+		return nil
 	}
 
 	// Find out how many workers are needed for each backend system.
@@ -777,6 +795,11 @@ outer:
 		r.suiteWorkers[suiteWorkersKey(job)]++
 		r.mu.Unlock()
 
+		if !r.tomb.Alive() {
+			r.add(&stats.TaskAbort, job)
+			continue
+		}
+
 		if badSuite[job.Suite] {
 			r.add(&stats.TaskAbort, job)
 			continue
@@ -790,13 +813,18 @@ outer:
 		if insideSuite != nil && insideSuite != job.Suite {
 			if false {
 				printf("WARNING: Was inside missing suite %s on last run, so cannot restore it.", insideSuite)
-			} else if !r.run(client, last, restoring, insideSuite, insideSuite.Restore, insideSuite.Debug, &abend) {
+			} else if !r.isStopping() && !r.run(client, last, restoring, insideSuite, insideSuite.Restore, insideSuite.Debug, &abend) {
 				r.add(&stats.SuiteRestoreError, last)
 				r.add(&stats.TaskAbort, job)
 				badProject = true
 				continue
 			}
 			insideSuite = nil
+		}
+
+		if !r.tomb.Alive() {
+			r.add(&stats.TaskAbort, job)
+			continue
 		}
 
 		last = job
@@ -873,13 +901,13 @@ outer:
 					debug = ""
 					repeat = -1
 				}
-				if !abend && !r.options.Restore && repeat <= 0 {
+				if !r.isStopping() && !abend && !r.options.Restore && repeat <= 0 {
 					if err := r.fetchJobArtifacts(client, job); err != nil {
 						printf("Cannot fetch artifacts of %s: %v", job, err)
 						r.tomb.Killf("cannot fetch artifacts of %s: %v", job, err)
 					}
 				}
-				if !abend && !r.run(client, job, restoring, job, job.Restore(), debug, &abend) {
+				if !r.isStopping() && !abend && !r.run(client, job, restoring, job, job.Restore(), debug, &abend) {
 					r.add(&stats.TaskRestoreError, job)
 					badProject = true
 					repeat = -1
@@ -888,28 +916,28 @@ outer:
 		}
 	}
 
-	if !abend && insideSuite != nil {
+	if !r.isStopping() && !abend && insideSuite != nil {
 		if err := r.fetchSuiteArtifacts(client, insideSuite, last); err != nil {
 			printf("Cannot copy contents %v", err)
 			r.tomb.Killf("cannot copy contents: %v", err)
 		}
-		if !r.run(client, last, restoring, insideSuite, insideSuite.Restore, insideSuite.Debug, &abend) {
+		if !r.isStopping() && !r.run(client, last, restoring, insideSuite, insideSuite.Restore, insideSuite.Debug, &abend) {
 			r.add(&stats.SuiteRestoreError, last)
 		}
 		insideSuite = nil
 	}
-	if !abend && insideBackend {
+	if !r.isStopping() && !abend && insideBackend {
 		if !r.run(client, last, restoring, backend, backend.Restore, backend.Debug, &abend) {
 			r.add(&stats.BackendRestoreError, last)
 		}
 		insideBackend = false
 	}
-	if !abend && insideProject {
+	if !r.isStopping() && !abend && insideProject {
 		if err := r.fetchProjectArtifacts(client); err != nil {
 			printf("Cannot copy contents %v", err)
 			r.tomb.Killf("cannot copy contents: %v", err)
 		}
-		if !r.run(client, last, restoring, r.project, r.project.Restore, r.project.Debug, &abend) {
+		if !r.isStopping() && !r.run(client, last, restoring, r.project, r.project.Restore, r.project.Debug, &abend) {
 			r.add(&stats.ProjectRestoreError, last)
 		}
 		insideProject = false

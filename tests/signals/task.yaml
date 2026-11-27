@@ -1,0 +1,79 @@
+summary: Test Spread shutdown handling for SIGINT and SIGTERM.
+
+execute: |
+    set -euo pipefail
+    spread_pid=""
+
+    # Ensure a failed assertion cannot leave the nested Spread process running.
+    cleanup() {
+        local status=$?
+        trap - EXIT
+        if [[ -n "$spread_pid" ]] && kill -0 "$spread_pid" 2>/dev/null; then
+            kill -KILL "$spread_pid" 2>/dev/null || true
+            wait "$spread_pid" || true
+        fi
+        # Reused LXD workers must be discarded even if a signal assertion fails.
+        if ! spread -discard; then
+            echo "failed to discard the nested Spread worker" >&2
+            status=1
+        fi
+        exit "$status"
+    }
+    trap cleanup EXIT
+
+    # Omit the system selector so the nested project's configured LXD system can change.
+    nested_selector=lxd:checks/main
+    for signal in INT TERM; do
+        transcript="signal-$signal.out"
+        spread -reuse -resend "$nested_selector" >"$transcript" 2>&1 &
+        spread_pid=$!
+
+        echo "Waiting for nested Spread to execute its long-running task"
+        started=false
+        for ((i = 0; i < 120; i++)); do
+            if grep -Eq 'Executing lxd:[^[:space:]]*:checks/main' "$transcript"; then
+                started=true
+                break
+            fi
+            if ! kill -0 "$spread_pid" 2>/dev/null; then
+                echo "nested Spread exited before executing its task" >&2
+                cat "$transcript" >&2
+                exit 1
+            fi
+            sleep 1
+        done
+        if [[ "$started" != true ]]; then
+            echo "timed out waiting for nested Spread to execute its task" >&2
+            cat "$transcript" >&2
+            exit 1
+        fi
+
+        # Send the signal only after confirming the nested job is actively executing.
+        kill -s "$signal" "$spread_pid"
+        for ((i = 0; i < 70; i++)); do
+            if ! kill -0 "$spread_pid" 2>/dev/null; then
+                break
+            fi
+            sleep 0.1
+        done
+        if kill -0 "$spread_pid" 2>/dev/null; then
+            echo "nested Spread did not exit promptly after SIG$signal" >&2
+            cat "$transcript" >&2
+            exit 1
+        fi
+
+        if wait "$spread_pid"; then
+            status=0
+        else
+            status=$?
+        fi
+        spread_pid=""
+        # A handled signal produces Spread's normal unsuccessful-run status;
+        # 130 or 143 would indicate that the graceful shutdown deadline expired.
+        if ((status != 1)); then
+            echo "expected nested Spread to finish cleanup with status 1 after SIG$signal; got $status" >&2
+            cat "$transcript" >&2
+            exit 1
+        fi
+        echo "Nested Spread handled SIG$signal and completed cleanup"
+    done

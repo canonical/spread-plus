@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/canonical/spread-plus/spread"
@@ -46,6 +47,8 @@ var (
 	workers        = flag.Int("workers", 0, "Number of workers to use on each system")
 	order          = flag.Bool("order", false, "Follow the tasks order passed as parameter")
 )
+
+const interruptShutdownTimeout = 5 * time.Second
 
 func main() {
 	if err := run(); err != nil {
@@ -166,18 +169,51 @@ func run() error {
 		return err
 	}
 
-	sigch := make(chan os.Signal, 1)
-	signal.Notify(sigch, os.Interrupt)
+	// Buffer the initial shutdown signal and a follow-up escalation.
+	sigch := make(chan os.Signal, 2)
+	signal.Notify(sigch, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sigch)
 	go func() {
-		<-sigch
-		printf("Interrupted, cleaning up (press Ctrl+C again to exit immediately)...")
-		go runner.Stop()
-		<-sigch
-		printf("Interrupted again, exiting immediately.")
-		os.Exit(130)
+		first := <-sigch
+		if first == syscall.SIGTERM {
+			printf("Terminated, cleaning up (send another termination signal to exit immediately)...")
+		} else {
+			printf("Interrupted, cleaning up (press Ctrl+C again to exit immediately)...")
+		}
+		exitCode := stopOnSignal(first, sigch, runner.Stop, interruptShutdownTimeout)
+		if exitCode != 0 {
+			printf("Cleanup did not finish within %s or was interrupted again; exiting immediately.", interruptShutdownTimeout)
+			os.Exit(exitCode)
+		}
 	}()
 
 	return runner.Wait()
+}
+
+func stopOnSignal(first os.Signal, signals <-chan os.Signal, stop func() error, timeout time.Duration) int {
+	stopped := make(chan struct{})
+	go func() {
+		stop()
+		close(stopped)
+	}()
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+	select {
+	case <-stopped:
+		return 0
+	case sig := <-signals:
+		return signalExitCode(sig)
+	case <-timer.C:
+		return signalExitCode(first)
+	}
+}
+
+func signalExitCode(sig os.Signal) int {
+	if sig == syscall.SIGTERM {
+		return 128 + int(syscall.SIGTERM)
+	}
+	return 130
 }
 
 // runExec sends a command to the socket created by a paused Spread shell.

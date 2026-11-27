@@ -1037,6 +1037,7 @@ func (s *localScript) run() (stdout, stderr []byte, err error) {
 
 	var outbuf, errbuf safeBuffer
 	cmd := exec.Command("/bin/bash", "-eu", "-")
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Stdin = &buf
 	cmd.Dir = s.dir
 	cmd.ExtraFiles = s.extraFiles
@@ -1058,7 +1059,7 @@ func (s *localScript) run() (stdout, stderr []byte, err error) {
 		return nil, nil, fmt.Errorf("cannot start local command: %v", err)
 	}
 
-	done := make(chan error)
+	done := make(chan error, 1)
 	go func() {
 		done <- cmd.Wait()
 	}()
@@ -1093,15 +1094,26 @@ Loop:
 			break Loop
 		case <-s.stop:
 			buf.Write([]byte("\n<interrupted>"))
+			if killErr := killProcessGroup(cmd.Process.Pid); killErr != nil {
+				err = fmt.Errorf("cannot kill interrupted local command: %v", killErr)
+				break Loop
+			}
+			<-done
 			err = fmt.Errorf("interrupted")
 			break Loop
 		case <-kill:
-			cmd.Process.Kill()
 			buf := &outbuf
 			if errbuf.Len() > 0 {
 				buf = &errbuf
 			}
 			buf.Write([]byte("\n<kill-timeout reached>"))
+			if killErr := killProcessGroup(cmd.Process.Pid); killErr != nil {
+				err = fmt.Errorf("cannot kill local command after kill-timeout: %v", killErr)
+				break Loop
+			}
+			<-done
+			err = fmt.Errorf("kill-timeout reached")
+			break Loop
 			err = fmt.Errorf("kill-timeout reached")
 		case <-warn.C:
 			var output, errput []byte
@@ -1151,6 +1163,13 @@ Loop:
 		return nil, nil, err
 	}
 	return outbuf.Bytes(), errbuf.Bytes(), nil
+}
+
+func killProcessGroup(pid int) error {
+	if err := syscall.Kill(-pid, syscall.SIGKILL); err != nil && err != syscall.ESRCH {
+		return err
+	}
+	return nil
 }
 
 func exitStatus(err error) int {
